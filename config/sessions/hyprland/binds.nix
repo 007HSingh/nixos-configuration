@@ -56,7 +56,7 @@
 	 "$mainMod, W, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle wallpaper"
 	 "$mainMod, S, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle calendar"
          "$mainMod, N, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle network"
-
+         "$mainMod&SHIFT_L, T, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle focustime"
 
          "$mainMod, F, exec, firefox"
          "$mainMod, E, exec, nautilus"

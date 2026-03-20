@@ -48,6 +48,7 @@ FloatingWindow {
         "stewart":   { w: 800, h: 600, x: Math.floor((screenW/2)-(800/2)), y: Math.floor((screenH/2)-(600/2)), comp: "stewart/stewart.qml" },
         "wallpaper": { w: 1920, h: 500, x: 0, y: Math.floor((screenH/2)-(500/2)), comp: "wallpaper/WallpaperPicker.qml" },
         "monitors":  { w: 850, h: 580, x: Math.floor((screenW/2)-(850/2)), y: Math.floor((screenH/2)-(580/2)), comp: "monitors/MonitorPopup.qml" },
+        "focustime": { w: 900, h: 720, x: Math.floor((screenW/2)-(900/2)), y: Math.floor((screenH/2)-(720/2)), comp: "focustime/FocusTimePopup.qml" },
         "hidden":    { w: 1, h: 1, x: -5000, y: -5000, comp: "" } 
     }
     width: 1
