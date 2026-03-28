@@ -30,7 +30,7 @@ FloatingWindow {
     property bool disableMorph: false 
     property bool isWallpaperTransition: false 
 
-    // NEW: Dynamic duration to allow fast opening but keep morphing smooth
+    // Dynamic duration to allow fast opening but keep morphing smooth
     property int morphDuration: 500
 
     // Safe park coordinates to avoid cursor traps
@@ -66,12 +66,10 @@ FloatingWindow {
         height: masterWindow.animH
         clip: true 
 
-        // MODIFIED: Use dynamic morphDuration instead of hardcoded 500
         Behavior on width { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
         Behavior on height { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
 
         opacity: masterWindow.isVisible ? 1.0 : 0.0
-        // MODIFIED: Speed up opacity fade-in to match the fast opening (200ms when fast, 300ms when morphing)
         Behavior on opacity { NumberAnimation { duration: masterWindow.isWallpaperTransition ? 150 : (masterWindow.morphDuration === 500 ? 300 : 200); easing.type: Easing.InOutSine } }
 
         // INNER FIXED CONTAINER
@@ -85,7 +83,7 @@ FloatingWindow {
                 anchors.fill: parent
                 focus: true
                 
-                // NEW: Key bubbling catch-all. This triggers ONLY if the child widget doesn't accept the escape event.
+                // Key bubbling catch-all.
                 Keys.onEscapePressed: {
                     Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/hypr/scripts/qs_manager.sh", "close"])
                     event.accepted = true
@@ -95,18 +93,17 @@ FloatingWindow {
                     if (currentItem) currentItem.forceActiveFocus();
                 }
 
-                // Perfectly synchronized crossfade! 
-                // Both take exactly 350ms so they blend seamlessly without a gap.
+                // Subtler transitions to respect wide layouts like the wallpaper picker
                 replaceEnter: Transition {
                     ParallelAnimation {
-                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 350; easing.type: Easing.InOutQuad }
-                        NumberAnimation { property: "scale"; from: 0.95; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
+                        NumberAnimation { property: "scale"; from: 0.98; to: 1.0; duration: 400; easing.type: Easing.OutBack }
                     }
                 }
                 replaceExit: Transition {
                     ParallelAnimation {
-                        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 350; easing.type: Easing.InOutQuad }
-                        NumberAnimation { property: "scale"; from: 1.0; to: 1.05; duration: 350; easing.type: Easing.InCubic }
+                        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 300; easing.type: Easing.InExpo }
+                        NumberAnimation { property: "scale"; from: 1.0; to: 1.02; duration: 300; easing.type: Easing.InExpo }
                     }
                 }
             }

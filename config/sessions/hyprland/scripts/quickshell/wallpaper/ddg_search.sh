@@ -37,6 +37,13 @@ python3 -u "$SCRIPT_DIR/get_ddg_links.py" "$QUERY" | while IFS='|' read -r thumb
     ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
     if [[ ! "$ext" =~ ^(jpg|jpeg|png|webp|gif)$ ]]; then ext="jpg"; fi
 
+    # Force webp to jpg for Qt compatibility
+    is_webp=0
+    if [[ "$ext" == "webp" ]]; then
+        is_webp=1
+        ext="jpg"
+    fi
+
     filename="ddg_${uuid}.${ext}"
     filepath="$SEARCH_DIR/$filename"
     tmppath="${filepath}.tmp"
@@ -57,7 +64,13 @@ python3 -u "$SCRIPT_DIR/get_ddg_links.py" "$QUERY" | while IFS='|' read -r thumb
 
     # If the file successfully downloaded and has data, atomically move it
     if [ -s "$tmppath" ]; then
-        mv "$tmppath" "$filepath"
+        # Ensure WebP thumbnails are converted to JPG for QuickShell compatibility
+        if file "$tmppath" | grep -iq "webp" || [ $is_webp -eq 1 ]; then
+            magick "$tmppath" "$filepath" 2>/dev/null || mv "$tmppath" "$filepath"
+            rm -f "$tmppath"
+        else
+            mv "$tmppath" "$filepath"
+        fi
         echo "$filename|$full_url" >> "$MAP_FILE"
         echo "Success: $filename saved." >> "$LOG_FILE"
     else

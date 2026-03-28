@@ -25,3 +25,11 @@ output_path = "~/.mozilla/firefox/zawmoi9h.default/chrome/matugen-github.css"
 [templates.web_youtube]
 input_path = "~/.config/matugen/templates/websites/youtube.css.template"
 output_path = "~/.mozilla/firefox/zawmoi9h.default/chrome/matugen-youtube.css"
+
+[templates.neovim]
+input_path = "~/.config/matugen/templates/nvim-colors.lua.template"
+output_path = "~/.config/nvim/matugen_colors.lua"
+
+[templates.cava]
+input_path = "~/.config/matugen/templates/cava-colors.ini.template"
+output_path = "~/.config/cava/colors"

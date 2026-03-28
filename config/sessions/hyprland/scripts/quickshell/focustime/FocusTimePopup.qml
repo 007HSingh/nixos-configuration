@@ -423,7 +423,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: 28
+            radius: 20
             color: window.crust
             border.color: Qt.alpha(window.surface1, 0.2)
             border.width: 1
@@ -582,7 +582,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: 200
-                            radius: 20
+                            radius: 14
                             color: window.base
                             border.color: Qt.alpha(window.surface1, 0.3)
                             border.width: 1
@@ -623,7 +623,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: 300
-                            radius: 20
+                            radius: 14
                             color: window.base
                             border.color: Qt.alpha(window.surface1, 0.3)
                             border.width: 1
@@ -647,7 +647,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: 200
-                            radius: 20
+                            radius: 14
                             color: window.base
                             border.color: Qt.alpha(window.surface1, 0.3)
                             border.width: 1
@@ -728,7 +728,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: 400 
-                            radius: 20
+                            radius: 14
                             color: window.base
                             border.color: Qt.alpha(window.surface1, 0.3)
                             border.width: 1
@@ -804,7 +804,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: 300
-                            radius: 20
+                            radius: 14
                             color: window.base
                             border.color: Qt.alpha(window.surface1, 0.3)
                             border.width: 1
@@ -868,7 +868,7 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true 
-                        radius: 20
+                        radius: 14
                         color: window.base
                         border.color: Qt.alpha(window.surface1, 0.3)
                         border.width: 1
@@ -899,11 +899,11 @@ Item {
                                 width: ListView.view.width
                                 height: 58 
                                 color: "transparent"
-                                radius: 12
+                                radius: 10
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 12
+                                    radius: 10
                                     color: rowMa.containsMouse ? window.surface0 : "transparent"
                                     Behavior on color { ColorAnimation { duration: 150 } }
                                 }
@@ -1060,7 +1060,7 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 260 // Adjusted to fit 7 rows + spacing cleanly
-                        radius: 20
+                        radius: 14
                         color: window.base
                         border.color: Qt.alpha(window.surface1, 0.3)
                         border.width: 1
@@ -1159,7 +1159,7 @@ Item {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    radius: 12
+                                    radius: 10
                                     color: window.surface0
                                     
                                     ColumnLayout {
@@ -1188,7 +1188,7 @@ Item {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    radius: 12
+                                    radius: 10
                                     color: window.surface0
                                     
                                     ColumnLayout {
@@ -1220,7 +1220,7 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 20
+                        radius: 14
                         color: window.base
                         border.color: Qt.alpha(window.surface1, 0.3)
                         border.width: 1
@@ -1249,11 +1249,11 @@ Item {
                                 width: ListView.view.width
                                 height: 58 
                                 color: "transparent"
-                                radius: 12
+                                radius: 10
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 12
+                                    radius: 10
                                     color: weekRowMa.containsMouse ? window.surface0 : "transparent"
                                     Behavior on color { ColorAnimation { duration: 150 } }
                                 }

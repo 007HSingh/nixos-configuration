@@ -18,7 +18,10 @@ Item {
     property bool initialFocusSet: false
     property int visibleItemCount: -1
     property int scrollAccum: 0
-    property int scrollThreshold: 500 
+    property int scrollThreshold: 300 
+
+    // Internal Intro Animation Property
+    property bool isReady: false
 
     // Filter System Properties
     property string currentFilter: "All"
@@ -36,6 +39,10 @@ Item {
     
     // Lock scrolling/interaction while actively streaming search results.
     property bool isScrollingBlocked: window.currentFilter === "Search" && window.hasSearched && window.isSearchActive && !window.isSearchPaused
+
+    // Startup lock to prevent visual jitter from the notification drawer
+    property bool isStartup: true
+    property bool jumpToLastOnFilterChange: false
 
     readonly property var filterData: [
         { name: "All", hex: "", label: "All" },
@@ -74,6 +81,9 @@ Item {
     onVisibleChanged: {
         if (!visible) {
             resetSearch();
+            window.isReady = false;
+        } else {
+            startupAnimTimer.restart();
         }
     }
 
@@ -107,7 +117,8 @@ Item {
         return window.currentFilter;
     }
     
-    property bool showNotification: currentNotification !== ""
+    // Block the notification flag during the first 500ms to stop UI shifting
+    property bool showNotification: !window.isStartup && currentNotification !== ""
 
     function getCleanName(name) {
         if (!name) return "";
@@ -233,6 +244,20 @@ Item {
     // -------------------------------------------------------------------------
     // TIMERS & SCROLL THROTTLE
     // -------------------------------------------------------------------------
+    Timer {
+        id: startupTimer
+        interval: 500 
+        running: true
+        onTriggered: window.isStartup = false
+    }
+
+    // Handles the staggered inward layout animation
+    Timer {
+        id: startupAnimTimer
+        interval: 100
+        onTriggered: window.isReady = true
+    }
+
     Timer {
         id: scrollThrottle
         interval: 150 
@@ -391,17 +416,58 @@ Item {
         if (proxyModel.count === 0) return;
         
         let start = view.currentIndex;
-        let current = start;
+        let found = -1;
 
-        for (let i = 0; i < proxyModel.count; i++) {
-            current = (current + direction + proxyModel.count) % proxyModel.count;
-            let fname = proxyModel.get(current).fileName || "";
-            let isVid = fname.startsWith("000_");
-            
-            if (checkItemMatchesFilter(fname, isVid, window.cacheVersion, window.currentFilter)) {
-                view.currentIndex = current;
-                return;
+        // Try to find the next item in the CURRENT filter
+        if (direction === 1) {
+            for (let i = start + 1; i < proxyModel.count; i++) {
+                let fname = proxyModel.get(i).fileName || "";
+                let isVid = fname.startsWith("000_");
+                if (checkItemMatchesFilter(fname, isVid, window.cacheVersion, window.currentFilter)) {
+                    found = i; break;
+                }
             }
+        } else {
+            for (let i = start - 1; i >= 0; i--) {
+                let fname = proxyModel.get(i).fileName || "";
+                let isVid = fname.startsWith("000_");
+                if (checkItemMatchesFilter(fname, isVid, window.cacheVersion, window.currentFilter)) {
+                    found = i; break;
+                }
+            }
+        }
+
+        if (found !== -1) {
+            view.currentIndex = found;
+            return;
+        }
+
+        // Boundary hit: Transition to next tab (excluding search)
+        let filterOrder = ["All", "Video", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink", "Monochrome"];
+        let currentFilterIdx = filterOrder.indexOf(window.currentFilter);
+
+        // If currently in Search, maintain old wrap logic
+        if (currentFilterIdx === -1) {
+            let current = start;
+            for (let i = 0; i < proxyModel.count; i++) {
+                current = (current + direction + proxyModel.count) % proxyModel.count;
+                let fname = proxyModel.get(current).fileName || "";
+                let isVid = fname.startsWith("000_");
+                
+                if (checkItemMatchesFilter(fname, isVid, window.cacheVersion, window.currentFilter)) {
+                    view.currentIndex = current;
+                    return;
+                }
+            }
+            return;
+        }
+
+        let nextFilterIdx = currentFilterIdx + direction;
+
+        // Boundary protections for the very first/last possible groups
+        if (nextFilterIdx >= 0 && nextFilterIdx < filterOrder.length) {
+            window.jumpToLastOnFilterChange = (direction === -1);
+            window.currentFilter = filterOrder[nextFilterIdx];
         }
     }
 
@@ -425,6 +491,7 @@ Item {
 
         let targetIndex = -1;
         let firstValidIndex = -1;
+        let lastValidIndex = -1;
         let cleanTarget = window.getCleanName(window.targetWallName);
 
         for (let i = 0; i < proxyModel.count; i++) {
@@ -435,15 +502,26 @@ Item {
                 if (firstValidIndex === -1) {
                     firstValidIndex = i;
                 }
+                lastValidIndex = i;
                 
                 if (cleanTarget !== "" && window.getCleanName(fname) === cleanTarget) {
                     targetIndex = i;
-                    break;
                 }
             }
         }
 
-        let indexToFocus = (targetIndex !== -1) ? targetIndex : firstValidIndex;
+        let indexToFocus = -1;
+
+        if (targetIndex !== -1) {
+            indexToFocus = targetIndex;
+        } else if (window.jumpToLastOnFilterChange && lastValidIndex !== -1) {
+            indexToFocus = lastValidIndex;
+        } else if (firstValidIndex !== -1) {
+            indexToFocus = firstValidIndex;
+        }
+
+        // Reset transition flag
+        window.jumpToLastOnFilterChange = false;
         
         if (indexToFocus !== -1) {
             view.currentIndex = indexToFocus;
@@ -498,8 +576,14 @@ Item {
     ListView {
         id: view
         anchors.fill: parent
-        anchors.margins: 0 
         
+        // This is where the elegant spatial layout animation happens
+        opacity: window.isReady ? 1.0 : 0.0
+        anchors.margins: window.isReady ? 0 : 40 
+        
+        Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutQuart } }
+        Behavior on anchors.margins { NumberAnimation { duration: 700; easing.type: Easing.OutExpo } }
+
         spacing: 0
         orientation: ListView.Horizontal
         clip: false 
@@ -528,7 +612,6 @@ Item {
         header: Item { width: Math.max(0, (view.width / 2) - ((window.itemWidth * 1.5) / 2)) }
         footer: Item { width: Math.max(0, (view.width / 2) - ((window.itemWidth * 1.5) / 2)) }
 
-        // Drives the UI rendering smoothly
         model: proxyModel
 
         // Debouncer acts as the bridge between the chaotic file system and the smooth UI
@@ -706,7 +789,15 @@ Item {
                             URL=$(awk -F'|' -v fname="${safeFileName}" '$1 == fname {print $2; exit}' "${mapFile}")
                             if [ -n "$URL" ]; then
                                 curl -s -L -A "Mozilla/5.0" "$URL" -o "${destFile}.tmp"
-                                mv "${destFile}.tmp" "${destFile}"
+                                
+                                # Convert WebP to JPG on the fly to match the extension and ensure Qt compatibility
+                                if file "${destFile}.tmp" | grep -iq "webp"; then
+                                    magick "${destFile}.tmp" "${destFile}"
+                                    rm -f "${destFile}.tmp"
+                                else
+                                    mv "${destFile}.tmp" "${destFile}"
+                                fi
+                                
                                 cp "${tempThumb}" "${finalThumb}"
                                 magick "${destFile}" -resize x420 -quality 70 "${finalThumb}"
                                 ${swwwStr} &
@@ -746,6 +837,9 @@ Item {
 
             Item {
                 anchors.centerIn: parent
+                // Offsets the trigonometric geometric shift when the height expands, balancing the padding!
+                anchors.horizontalCenterOffset: ((window.itemHeight - height) / 2) * window.skewFactor
+                
                 width: parent.width > 0 ? parent.width * (targetWidth / (targetWidth + window.spacing)) : 0
                 height: parent.height
 
@@ -824,14 +918,22 @@ Item {
     Rectangle {
         id: filterBarBackground
         anchors.top: parent.top
-        anchors.topMargin: 40 
+        
+        // This makes the filter bar elegantly drop down from above
+        anchors.topMargin: window.isReady ? 40 : -100 
+        opacity: window.isReady ? 1.0 : 0.0
+        Behavior on anchors.topMargin { NumberAnimation { duration: 600; easing.type: Easing.OutExpo } }
+        Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
+
         anchors.horizontalCenter: parent.horizontalCenter
         z: 20
         height: 56
         width: filterRow.width + 24
-        radius: height / 2
-        color: Qt.rgba(_theme.mantle.r, _theme.mantle.g, _theme.mantle.b, 0.85)
-        border.color: Qt.rgba(_theme.surface1.r, _theme.surface1.g, _theme.surface1.b, 0.5)
+        radius: 14 // Match topbar outer radius
+        
+        // Boosted integration with Matugen colors
+        color: Qt.rgba(_theme.mantle.r, _theme.mantle.g, _theme.mantle.b, 0.90)
+        border.color: Qt.rgba(_theme.surface2.r, _theme.surface2.g, _theme.surface2.b, 0.8)
         border.width: 1
 
         Row {
@@ -843,15 +945,24 @@ Item {
                 id: notifDrawer
                 height: 44
                 property real paddingLeft: window.showSpinner ? 40 : 16
-                property real targetWidth: window.showNotification ? Math.min(notifTextDrawer.implicitWidth + paddingLeft + 16, 300) : 0
+                // Added slightly more right padding for a balanced pill shape
+                property real targetWidth: window.showNotification ? Math.min(notifTextDrawer.implicitWidth + paddingLeft + 20, 300) : 0
                 width: targetWidth
                 visible: width > 0.1 
-                radius: height / 2
+                radius: 10 // Match topbar inner pill radius
                 clip: true
-                color: "transparent"
-                border.width: 0
+                
+                // Matugen background pop for the notification drawer
+                color: window.showNotification ? Qt.rgba(_theme.surface2.r, _theme.surface2.g, _theme.surface2.b, 0.5) : "transparent"
+                border.color: window.showNotification ? Qt.rgba(_theme.surface1.r, _theme.surface1.g, _theme.surface1.b, 0.8) : "transparent"
+                border.width: 1
 
-                Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutExpo } }
+                // Springy outward animation
+                Behavior on width { 
+                    NumberAnimation { duration: 600; easing.type: Easing.OutBack; easing.overshoot: 0.5 } 
+                }
+                Behavior on color { ColorAnimation { duration: 400 } }
+                Behavior on border.color { ColorAnimation { duration: 400 } }
 
                 Item {
                     visible: window.showSpinner
@@ -873,7 +984,7 @@ Item {
                             ctx.arc(7, 7, 5, 0, Math.PI * 2);
                             ctx.stroke();
                             
-                            ctx.strokeStyle = Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.7);
+                            ctx.strokeStyle = Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.9);
                             ctx.beginPath();
                             ctx.arc(7, 7, 5, 0, Math.PI * 0.5);
                             ctx.stroke();
@@ -894,15 +1005,18 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, 300 - anchors.leftMargin - 16)
                     text: window.currentNotification
-                    color: Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.7)
+                    
+                    color: _theme.text
                     font.family: "JetBrains Mono"
                     font.pixelSize: 14
                     font.bold: true
                     elide: Text.ElideRight
 
-                    opacity: window.showNotification ? 1.0 : 0.0
-                    Behavior on opacity { NumberAnimation { duration: 300 } }
-                    Behavior on anchors.leftMargin { NumberAnimation { duration: 500; easing.type: Easing.InOutExpo } }
+                    opacity: window.showNotification ? 0.9 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
+                    Behavior on anchors.leftMargin { 
+                        NumberAnimation { duration: 600; easing.type: Easing.OutBack; easing.overshoot: 0.5 } 
+                    }
                 }
             }
 
@@ -917,15 +1031,18 @@ Item {
                     
                     Rectangle {
                         anchors.fill: parent
-                        radius: height / 2
+                        radius: 10 // Match topbar inner pill radius
                         color: modelData.hex === "" 
                                 ? (window.currentFilter === modelData.name ? _theme.surface2 : "transparent") 
                                 : modelData.hex
-                        border.color: window.currentFilter === modelData.name ? _theme.text : Qt.rgba(0,0,0, 0.2)
+                        
+                        // Improved Matugen border handling for inactive items
+                        border.color: window.currentFilter === modelData.name ? _theme.text : Qt.rgba(_theme.surface1.r, _theme.surface1.g, _theme.surface1.b, 0.6)
                         border.width: window.currentFilter === modelData.name ? 2 : 1
                         scale: window.currentFilter === modelData.name ? 1.15 : (filterMouse.containsMouse ? 1.08 : 1.0)
                         
-                        Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                        Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+                        Behavior on border.color { ColorAnimation { duration: 300 } }
 
                         Text {
                             id: filterText
@@ -993,13 +1110,13 @@ Item {
                 visible: window.currentFilter === "Search" && window.hasSearched
                 width: visible ? 44 : 0
                 height: 44
-                radius: height / 2
+                radius: 10 // Match topbar inner pill radius
                 clip: true
                 color: window.isSearchPaused ? _theme.surface2 : "transparent"
-                border.color: window.isSearchPaused ? _theme.text : Qt.rgba(0,0,0, 0.2)
+                border.color: window.isSearchPaused ? _theme.text : Qt.rgba(_theme.surface1.r, _theme.surface1.g, _theme.surface1.b, 0.6)
                 border.width: window.isSearchPaused ? 2 : 1
                 
-                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
                 Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuart } }
                 
                 MouseArea {
@@ -1041,14 +1158,17 @@ Item {
                 id: searchBox
                 height: 44
                 width: window.currentFilter === "Search" ? 360 : 44 
-                radius: height / 2
+                radius: 10 // Match topbar inner pill radius
                 clip: true
-                color: window.currentFilter === "Search" ? _theme.surface2 : "transparent"
-                border.color: window.currentFilter === "Search" ? _theme.text : Qt.rgba(0,0,0, 0.2)
+                
+                // Matugen coloring applied to the search pill
+                color: window.currentFilter === "Search" ? Qt.rgba(_theme.surface2.r, _theme.surface2.g, _theme.surface2.b, 0.8) : "transparent"
+                border.color: window.currentFilter === "Search" ? Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.5) : Qt.rgba(_theme.surface1.r, _theme.surface1.g, _theme.surface1.b, 0.6)
                 border.width: window.currentFilter === "Search" ? 2 : 1
                 
-                Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutExpo } }
+                Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
                 Behavior on color { ColorAnimation { duration: 400; easing.type: Easing.OutQuart } }
+                Behavior on border.color { ColorAnimation { duration: 400 } }
 
                 MouseArea {
                     id: searchMouseArea
@@ -1099,7 +1219,7 @@ Item {
                     
                     opacity: window.currentFilter === "Search" ? 1.0 : 0.0
                     visible: opacity > 0
-                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
                     
                     color: _theme.text
                     font.family: "JetBrains Mono"
@@ -1121,14 +1241,14 @@ Item {
                     id: submitBtn
                     width: 32
                     height: 32
-                    radius: 16
+                    radius: 8 // Match topbar deepest nested button radius (like media art)
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     
                     opacity: window.currentFilter === "Search" ? 1.0 : 0.0
                     visible: opacity > 0
-                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
 
                     color: submitMouseArea.containsMouse ? Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.1) : "transparent"
                     border.color: submitMouseArea.containsMouse ? _theme.text : Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.3)
@@ -1178,6 +1298,7 @@ Item {
         view.forceActiveFocus();
         window.processMarkers();
         window.triggerColorExtraction();
+        startupAnimTimer.start();
     }
 
     Component.onDestruction: {

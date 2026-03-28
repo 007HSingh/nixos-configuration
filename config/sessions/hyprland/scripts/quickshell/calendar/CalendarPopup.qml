@@ -84,6 +84,9 @@ Item {
         return window.mauve;                            // Night Accent
     }
 
+    // Blends the accent color with the theme's text color for perfect harmony and readability
+    readonly property color textAccent: Qt.tint(window.timeAccent, Qt.alpha(window.text, 0.35))
+
     // -------------------------------------------------------------------------
     // ANIMATIONS & INTRO
     // -------------------------------------------------------------------------
@@ -250,7 +253,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: 35
+            radius: 20
             color: window.base
             border.color: window.surface0
             border.width: 1
@@ -259,7 +262,7 @@ Item {
             // =======================================================
             // AMBIENT WIDGET COLOR BLOBS (Spread Out)
             // =======================================================
-            // Primary Weather Blob
+            // Primary Weather Blob (Kept true weather color for ambient feel)
             Rectangle {
                 width: parent.width * 0.5; height: width; radius: width / 2
                 x: (parent.width * 0.75 - width / 2) + Math.cos(window.globalOrbitAngle * 1.5) * 350
@@ -343,7 +346,7 @@ Item {
                             var yy = height/2 + Math.sin(i) * 140;
                             if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
                         }
-                        ctx.strokeStyle = window.activeWeatherHex;
+                        ctx.strokeStyle = window.textAccent;
                         ctx.lineWidth = 1.5;
                         ctx.setLineDash([4, 10]);
                         ctx.stroke();
@@ -374,7 +377,7 @@ Item {
                             font.family: "JetBrains Mono"
                             font.weight: Font.Bold
                             font.pixelSize: 32
-                            color: window.activeWeatherHex
+                            color: window.textAccent
                             Layout.alignment: Qt.AlignBottom
                             Layout.bottomMargin: 15
                             opacity: window.secondPulse > 1.02 ? 1.0 : 0.6 
@@ -428,8 +431,8 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             radius: 28
-                            color: isHighlighted ? window.activeWeatherHex : (hrMa.containsMouse ? window.surface2 : window.surface0)
-                            border.color: isHighlighted ? "transparent" : (hrMa.containsMouse ? window.activeWeatherHex : window.surface1)
+                            color: isHighlighted ? window.textAccent : (hrMa.containsMouse ? window.surface2 : window.surface0)
+                            border.color: isHighlighted ? "transparent" : (hrMa.containsMouse ? window.textAccent : window.surface1)
                             border.width: 1
                             
                             Behavior on color { ColorAnimation { duration: 200 } }
@@ -442,14 +445,14 @@ Item {
                                     Layout.alignment: Qt.AlignHCenter
                                     text: modelData.time
                                     font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: 12
-                                    color: isHighlighted ? window.mantle : (hrMa.containsMouse ? window.text : window.overlay1)
+                                    color: isHighlighted ? window.base : (hrMa.containsMouse ? window.text : window.overlay1)
                                 }
                                 
                                 Text { 
                                     Layout.alignment: Qt.AlignHCenter
                                     text: modelData.icon || (window.weatherData && window.weatherData.forecast[window.weatherView] ? window.weatherData.forecast[window.weatherView].icon : "")
                                     font.family: "Iosevka Nerd Font"; font.pixelSize: 18
-                                    color: isHighlighted ? window.base : (modelData.hex || window.activeWeatherHex)
+                                    color: isHighlighted ? window.base : (modelData.hex || window.text)
                                     
                                     transform: Translate { y: hrMa.containsMouse ? -3 : 0 }
                                     Behavior on transform { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
@@ -478,7 +481,7 @@ Item {
                 width: 320
                 height: 420
                 color: Qt.alpha(window.surface0, 0.2) 
-                radius: 30
+                radius: 14
                 border.color: Qt.alpha(window.surface1, 0.4)
                 border.width: 1
                 z: 10 
@@ -562,8 +565,8 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 
-                                color: isToday ? window.activeWeatherHex : (dayMa.containsMouse ? Qt.alpha(window.surface2, 0.4) : "transparent")
-                                radius: 14
+                                color: isToday ? window.textAccent : (dayMa.containsMouse ? Qt.alpha(window.surface2, 0.4) : "transparent")
+                                radius: 10
                                 scale: dayMa.containsMouse ? 1.2 : 1.0
                                 border.color: isToday ? window.surface0 : (dayMa.containsMouse ? window.overlay0 : "transparent")
                                 border.width: isToday || dayMa.containsMouse ? 1 : 0
@@ -637,7 +640,7 @@ Item {
                             
                             Text { 
                                 anchors.centerIn: parent; text: ""; font.family: "Iosevka Nerd Font"; font.pixelSize: 18
-                                color: parent.containsMouse ? window.activeWeatherHex : window.overlay1
+                                color: parent.containsMouse ? window.textAccent : window.overlay1
                                 transform: Translate { x: parent.containsMouse ? -5 : wPrevMa.pulseOffset }
                                 Behavior on transform { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
                             }
@@ -664,7 +667,7 @@ Item {
                             
                             Text { 
                                 anchors.centerIn: parent; text: ""; font.family: "Iosevka Nerd Font"; font.pixelSize: 18
-                                color: parent.containsMouse ? window.activeWeatherHex : window.overlay1
+                                color: parent.containsMouse ? window.textAccent : window.overlay1
                                 transform: Translate { x: parent.containsMouse ? 5 : wNextMa.pulseOffset }
                                 Behavior on transform { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
                             }
@@ -691,7 +694,7 @@ Item {
                             font.family: "JetBrains Mono"
                             font.weight: Font.Bold
                             font.pixelSize: 16
-                            color: window.activeWeatherHex
+                            color: window.textAccent
                             Behavior on color { ColorAnimation { duration: 1000 } }
                         }
                     }
@@ -722,7 +725,7 @@ Item {
                                     anchors.top: parent.top
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     width: 68; height: 68; radius: 34
-                                    color: window.activeWeatherHex
+                                    color: window.textAccent
                                     opacity: gaugeMa.containsMouse ? 0.3 : 0.0
                                     Behavior on opacity { NumberAnimation { duration: 200 } }
                                 }
@@ -762,8 +765,8 @@ Item {
                                                 ctx.beginPath();
                                                 ctx.arc(r, r, r - 4, 0, animProgress * 2 * Math.PI);
                                                 var grad = ctx.createLinearGradient(0, 0, width, height);
-                                                grad.addColorStop(0, window.activeWeatherHex);
-                                                grad.addColorStop(1, window.blue);
+                                                grad.addColorStop(0, window.timeAccent);
+                                                grad.addColorStop(1, window.sapphire); // Using Matugen blue tone
                                                 ctx.strokeStyle = grad;
                                                 ctx.lineWidth = 4;
                                                 ctx.lineCap = "round";
@@ -792,7 +795,7 @@ Item {
                                         text: modelData.icon
                                         font.family: "Iosevka Nerd Font"
                                         font.pixelSize: 14
-                                        color: gaugeMa.containsMouse ? window.activeWeatherHex : window.overlay0
+                                        color: gaugeMa.containsMouse ? window.textAccent : window.overlay0
                                         Behavior on color { ColorAnimation { duration: 200 } }
                                     }
                                     Text { 
@@ -886,7 +889,7 @@ Item {
                         
                         Rectangle {
                             width: 40; height: 40; radius: 20; color: window.surface0
-                            Text { anchors.centerIn: parent; text: ""; font.family: "Iosevka Nerd Font"; font.pixelSize: 18; color: window.timeAccent }
+                            Text { anchors.centerIn: parent; text: ""; font.family: "Iosevka Nerd Font"; font.pixelSize: 18; color: window.textAccent }
                         }
                         
                         Text { 
@@ -900,7 +903,7 @@ Item {
                         Item { Layout.fillWidth: true }
                         
                         Rectangle {
-                            width: 120; height: 36; radius: 18
+                            width: 120; height: 36; radius: 10
                             color: schLinkMa.containsMouse ? window.mauve : Qt.alpha(window.surface1, 0.5)
                             border.color: window.mauve; border.width: 1
                             Behavior on color { ColorAnimation { duration: 150 } }
@@ -1074,7 +1077,7 @@ Item {
                                                 anchors.centerIn: parent
                                                 width: breakText.width + 16
                                                 height: 24
-                                                radius: 12
+                                                radius: 6
                                                 color: window.mantle
                                                 border.color: window.surface2
                                                 border.width: 1

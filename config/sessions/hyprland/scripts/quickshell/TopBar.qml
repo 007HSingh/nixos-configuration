@@ -605,7 +605,7 @@ PanelWindow {
             // Dedicated System Tray Pill
             Rectangle {
                 height: 48
-                radius: 24
+                radius: 14
                 border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, 0.08)
                 border.width: 1
                 color: Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
@@ -691,7 +691,7 @@ PanelWindow {
             // System Elements Pill
             Rectangle {
                 height: 48
-                radius: 24
+                radius: 14
                 border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, 0.08)
                 border.width: 1
                 color: Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
@@ -711,7 +711,7 @@ PanelWindow {
                     Rectangle {
                         property bool isHovered: kbMouse.containsMouse
                         color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4)
-                        radius: 17; Layout.preferredHeight: sysLayout.pillHeight;
+                        radius: 10; Layout.preferredHeight: sysLayout.pillHeight;
                         
                         property real targetWidth: kbLayoutRow.implicitWidth + 24
                         Layout.preferredWidth: targetWidth
@@ -732,13 +732,13 @@ PanelWindow {
                     Rectangle {
                         id: wifiPill
                         property bool isHovered: wifiMouse.containsMouse
-                        radius: 17; Layout.preferredHeight: sysLayout.pillHeight; 
+                        radius: 10; Layout.preferredHeight: sysLayout.pillHeight; 
                         color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4)
                         
                         // Vibrant, guaranteed gradient contrast
                         Rectangle {
                             anchors.fill: parent
-                            radius: 17
+                            radius: 10
                             opacity: barWindow.isWifiOn ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 300 } }
                             gradient: Gradient {
@@ -767,14 +767,14 @@ PanelWindow {
                     Rectangle {
                         id: btPill
                         property bool isHovered: btMouse.containsMouse
-                        radius: 17; Layout.preferredHeight: sysLayout.pillHeight
+                        radius: 10; Layout.preferredHeight: sysLayout.pillHeight
                         clip: true
                         color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4)
                         
                         // Vibrant, guaranteed gradient contrast
                         Rectangle {
                             anchors.fill: parent
-                            radius: 17
+                            radius: 10
                             opacity: barWindow.isBtOn ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 300 } }
                             gradient: Gradient {
@@ -803,7 +803,7 @@ PanelWindow {
                     Rectangle {
                         property bool isHovered: volMouse.containsMouse
                         color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : (barWindow.isMuted ? Qt.rgba(0, 0, 0, 0.2) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4))
-                        radius: 17; Layout.preferredHeight: sysLayout.pillHeight;
+                        radius: 10; Layout.preferredHeight: sysLayout.pillHeight;
                         
                         property real targetWidth: volLayoutRow.implicitWidth + 24
                         Layout.preferredWidth: targetWidth
@@ -831,7 +831,7 @@ PanelWindow {
                     Rectangle {
                         property bool isHovered: batMouse.containsMouse
                         color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4); 
-                        radius: 17; Layout.preferredHeight: sysLayout.pillHeight;
+                        radius: 10; Layout.preferredHeight: sysLayout.pillHeight;
                         
                         property real targetWidth: batLayoutRow.implicitWidth + 24
                         Layout.preferredWidth: targetWidth

@@ -12,7 +12,7 @@ def log(msg):
         pass
 
 def main():
-    log("=== NEW SEARCH STARTING ===")
+    log("=== NEW SEARCH STARTING (Safe Search: OFF) ===")
     if len(sys.argv) < 2: 
         log("ERROR: No query provided.")
         return
@@ -31,7 +31,8 @@ def main():
         "Referer": "https://duckduckgo.com/"
     }
 
-    search_url = "https://duckduckgo.com/?q=" + urllib.parse.quote(query) + "&iar=images&iax=images&ia=images"
+    # Added kp=-1 to the initial search URL to influence the session/vqd
+    search_url = f"https://duckduckgo.com/?q={urllib.parse.quote(query)}&iar=images&iax=images&ia=images&kp=-1"
     vqd = None
 
     log(f"Fetching VQD token from: {search_url}")
@@ -61,11 +62,27 @@ def main():
     next_url = None
     links_found = 0
     
-    for page in range(5):  # Limit to 5 pages
+    for page in range(5): 
         log(f"Fetching JSON page {page + 1}...")
 
-        url = "https://duckduckgo.com" + next_url if next_url else "https://duckduckgo.com/i.js?" + urllib.parse.urlencode({"l": "us-en", "o": "json", "q": query, "vqd": vqd, "f": ",,,", "ex": "-1"})
-        if next_url and "vqd=" not in url: url += f"&vqd={vqd}"
+        # Constructing parameters: 'p': '-1' disables Safe Search
+        params = {
+            "l": "us-en",
+            "o": "json",
+            "q": query,
+            "vqd": vqd,
+            "f": ",,,",
+            "p": "-1",  # -1 = Off, 1 = Moderate, 2 = Strict
+            "ex": "-1"
+        }
+
+        if next_url:
+            url = "https://duckduckgo.com" + next_url
+            # Ensure safe search stays off on subsequent page loads
+            if "p=-1" not in url: url += "&p=-1"
+            if "vqd=" not in url: url += f"&vqd={vqd}"
+        else:
+            url = "https://duckduckgo.com/i.js?" + urllib.parse.urlencode(params)
 
         try:
             req = urllib.request.Request(url, headers=headers)
@@ -74,7 +91,9 @@ def main():
             log(f"Successfully parsed JSON. Found {len(results)} raw image results.")
             
             for res in results:
-                if int(res.get("width", 0)) >= 1920 and int(res.get("height", 0)) >= 1080:
+                width = int(res.get("width", 0))
+                height = int(res.get("height", 0))
+                if width >= 1920 and height >= 1080:
                     t, i = res.get("thumbnail"), res.get("image")
                     if t and i:
                         try:
@@ -82,28 +101,25 @@ def main():
                             sys.stdout.flush()
                             links_found += 1
                         except BrokenPipeError:
-                            log("Broken pipe detected. Bash script stopped listening. Exiting cleanly.")
+                            log("Broken pipe detected. Bash script stopped listening. Exiting.")
                             os._exit(0) 
             
             next_url = data.get("next")
             if not next_url: 
-                log("No 'next' URL provided by DDG to continue to the next page.")
+                log("No 'next' URL provided by DDG.")
                 break
                 
         except BrokenPipeError:
-            log("Broken pipe detected in outer loop. Exiting cleanly.")
             os._exit(0)
         except Exception as e: 
-            log(f"Error parsing JSON or fetching page: {str(e)}")
+            log(f"Error: {str(e)}")
             break
             
-    log(f"=== SEARCH COMPLETE. Total FHD links piped to bash: {links_found} ===")
+    log(f"=== SEARCH COMPLETE. Total FHD links: {links_found} ===")
 
 if __name__ == "__main__": 
-    try:
-        os.remove(LOG_FILE)
-    except: 
-        pass
+    try: os.remove(LOG_FILE)
+    except: pass
     
     try:
         main()
@@ -113,5 +129,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         os._exit(1)
     except Exception as e:
-        log(f"FATAL UNHANDLED ERROR: {str(e)}")
+        log(f"FATAL: {str(e)}")
         os._exit(1)

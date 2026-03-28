@@ -575,7 +575,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: 30
+            radius: 20
             color: window.base
             border.color: window.surface0
             border.width: 1
@@ -1241,7 +1241,7 @@ Item {
                             Rectangle {
                                 id: floatCard
                                 anchors.fill: parent
-                                radius: 16
+                                radius: 14
                                 
                                 property string itemId: id
                                 property string itemName: name
@@ -1313,7 +1313,7 @@ Item {
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 16
+                                    radius: 14
                                     color: "transparent"
                                     border.width: 1
                                     border.color: window.surface2
@@ -1322,7 +1322,7 @@ Item {
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 16
+                                    radius: 14
                                     opacity: locksList || isHighlighted ? 1.0 : 0.0
                                     color: "transparent"
                                     border.width: isHighlighted && !locksList ? 1 : 2
@@ -1331,7 +1331,7 @@ Item {
                                     Rectangle {
                                         anchors.fill: parent
                                         anchors.margins: isHighlighted && !locksList ? 1 : 2
-                                        radius: 14
+                                        radius: 12
                                         color: window.base
                                         opacity: locksList ? 0.9 : 1.0
                                     }
@@ -1346,7 +1346,7 @@ Item {
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 16
+                                    radius: 14
                                     color: "#ffffff"
                                     opacity: floatCard.flashOpacity
                                     PropertyAnimation on opacity { id: cardFlashAnim; to: 0; duration: 500; easing.type: Easing.OutExpo }
@@ -1375,7 +1375,7 @@ Item {
                                         if (floatCard.renderFill <= 0.001) return;
 
                                         var currentW = width * floatCard.renderFill;
-                                        var r = 16; 
+                                        var r = 14; 
 
                                         ctx.save();
                                         ctx.beginPath();
@@ -1629,7 +1629,7 @@ Item {
                 anchors.bottomMargin: 25
                 width: 360
                 height: 54
-                radius: 27
+                radius: 14
                 color: "#1affffff" 
                 border.color: "#1affffff"
                 border.width: 1
@@ -1643,14 +1643,14 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 21
+                        radius: 10
                         
                         color: window.activeMode === "wifi" ? "transparent" : (wifiTabMa.containsMouse ? window.surface1 : "transparent")
                         Behavior on color { ColorAnimation { duration: 200 } }
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 21
+                            radius: 10
                             opacity: window.activeMode === "wifi" ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 300 } }
                             gradient: Gradient {
@@ -1681,13 +1681,13 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 21
+                        radius: 10
                         color: window.activeMode === "bt" ? "transparent" : (btTabMa.containsMouse ? window.surface1 : "transparent")
                         Behavior on color { ColorAnimation { duration: 200 } }
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 21
+                            radius: 10
                             opacity: window.activeMode === "bt" ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 300 } }
                             gradient: Gradient {

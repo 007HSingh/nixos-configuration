@@ -286,7 +286,7 @@ Item {
                 property real inset: (sw / 2) + 0.5 
                 property real w: width
                 property real h: height
-                property real r: 15 - inset
+                property real r: 14 - inset
                 
                 // Mathematical perimeter
                 property real straightLines: 2 * (w - 2 * inset - 2 * r) + 2 * (h - 2 * inset - 2 * r)
@@ -390,7 +390,7 @@ Item {
             anchors.fill: parent
             anchors.margins: 3
             color: root.base
-            radius: 12
+            radius: 10
 
             // FIX: This forces the entire background to render as a single hardware texture,
             // preventing the UI from dragging and causing "shadow boxes" during the StackView transition!
@@ -400,7 +400,7 @@ Item {
             Rectangle {
                 id: innerBgMask
                 anchors.fill: parent
-                radius: 12
+                radius: 10
                 visible: false
                 
                 // FIX: Masks in MultiEffect strictly require layer.enabled to correctly capture the radius during scaling!
@@ -411,7 +411,7 @@ Item {
                 id: bgEffectsLayer
                 anchors.fill: parent
                 
-                // This correctly clamps the blur and orbit circles to the 12px radius corners
+                // This correctly clamps the blur and orbit circles to the 10px radius corners
                 layer.enabled: true
                 layer.effect: MultiEffect {
                     maskEnabled: true
@@ -423,7 +423,9 @@ Item {
                     anchors.fill: parent
                     source: root.musicData.blur ? "file://" + root.musicData.blur : ""
                     fillMode: Image.PreserveAspectCrop
-                    opacity: status === Image.Ready ? 0.9 : 0.0
+                    
+                    // Fixed: Ensures blur is completely hidden when stopped so the pure base color matches the calendar
+                    opacity: (status === Image.Ready && root.musicData.status !== "Stopped" && root.musicData.status !== "Offline") ? 0.9 : 0.0
                     Behavior on opacity { NumberAnimation { duration: 800; easing.type: Easing.InOutQuad } }
                 }
 
@@ -432,7 +434,9 @@ Item {
                     width: parent.width * 0.8; height: width; radius: width / 2
                     x: (parent.width / 2 - width / 2) + Math.cos(root.globalOrbitAngle * 2) * 150
                     y: (parent.height / 2 - height / 2) + Math.sin(root.globalOrbitAngle * 2) * 100
-                    opacity: root.musicData.status === "Playing" ? 0.08 : 0.04
+                    
+                    // Fixed: Hides orbits when stopped
+                    opacity: root.musicData.status === "Playing" ? 0.08 : (root.musicData.status === "Paused" ? 0.04 : 0.0)
                     color: root.musicData.status === "Playing" ? root.mauve : root.surface2
                     Behavior on color { ColorAnimation { duration: 1000 } }
                     Behavior on opacity { NumberAnimation { duration: 1000 } }
@@ -442,7 +446,9 @@ Item {
                     width: parent.width * 0.9; height: width; radius: width / 2
                     x: (parent.width / 2 - width / 2) + Math.sin(root.globalOrbitAngle * 1.5) * -150
                     y: (parent.height / 2 - height / 2) + Math.cos(root.globalOrbitAngle * 1.5) * -100
-                    opacity: root.musicData.status === "Playing" ? 0.08 : 0.02
+                    
+                    // Fixed: Hides orbits when stopped
+                    opacity: root.musicData.status === "Playing" ? 0.08 : (root.musicData.status === "Paused" ? 0.02 : 0.0)
                     color: root.musicData.status === "Playing" ? root.blue : root.surface1
                     Behavior on color { ColorAnimation { duration: 1000 } }
                     Behavior on opacity { NumberAnimation { duration: 1000 } }
@@ -853,7 +859,7 @@ Item {
                         Rectangle {
                             Layout.preferredHeight: 28
                             Layout.preferredWidth: applyTxt.width + 30
-                            radius: 14
+                            radius: 10
                             color: root.eqData.pending ? root.mauve : root.surface1
                             border.color: root.eqData.pending ? root.mauve : root.surface2
                             border.width: 1
@@ -1011,7 +1017,7 @@ Item {
                                                 implicitWidth: 10 
                                                 implicitHeight: 150
                                                 width: 10; height: eqSlider.availableHeight
-                                                radius: 5; 
+                                                radius: 4; 
                                                 
                                                 // Dynamic tint: surface0 with 70% opacity for a softer dark look
                                                 color: Qt.rgba(root.surface0.r, root.surface0.g, root.surface0.b, 0.7)
@@ -1057,9 +1063,9 @@ Item {
                                                     Rectangle {
                                                         id: eqFillMask
                                                         anchors.fill: parent
-                                                        radius: 5
+                                                        radius: 4
                                                         visible: false
-                                                        layer.enabled: true
+                                                        layer.enabled: true 
                                                     }
 
                                                     Rectangle {

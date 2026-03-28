@@ -58,32 +58,30 @@ Item {
 
     readonly property bool isCharging: batStatus === "Charging"
 
-    // Use a unified hue for the start colors
+    // Unified hue for Battery
     readonly property color batColorStart: {
         if (isCharging) return window.green;
         if (batCapacity >= 70) return window.blue;
         if (batCapacity >= 30) return window.yellow;
         return window.red;
     }
-
-    // Mathematically derive a cohesive, realistic end color instead of arbitrarily mapping to Teal/Sapphire/Maroon
     readonly property color batColorEnd: Qt.lighter(batColorStart, 1.15)
 
+    // Unified hue for Performance Profile
     readonly property color profileStart: {
         if (powerProfile === "performance") return window.red;
         if (powerProfile === "power-saver") return window.green;
         return window.blue;
     }
-    
     readonly property color profileEnd: Qt.lighter(profileStart, 1.15)
 
+    // Ambient Blobs - Based strictly on aesthetic pairs derived from battery state
     readonly property color ambientPrimary: window.batColorStart
-
-    // Keep the background blobs distinct and interesting by using alternative Matugen palette colors
     readonly property color ambientSecondary: {
-        if (powerProfile === "performance") return window.peach;
-        if (powerProfile === "power-saver") return window.teal;
-        return window.sapphire; 
+        if (isCharging) return window.sapphire;
+        if (batCapacity >= 70) return window.mauve;
+        if (batCapacity >= 30) return window.peach;
+        return window.maroon; 
     }
 
     property real animCapacity: 0
@@ -170,9 +168,9 @@ Item {
         // Outer Border
         Rectangle {
             anchors.fill: parent
-            radius: 30
+            radius: 20
             color: window.base
-            border.color: window.surface0
+            border.color: window.surface0 // Back to neutral so it doesn't clash
             border.width: 1
             clip: true
 
@@ -231,10 +229,10 @@ Item {
                 
                 // Hours Box
                 Rectangle {
-                    width: 44; height: 48; radius: 12
+                    width: 44; height: 48; radius: 10
                     color: "#0dffffff"; border.color: "#1affffff"; border.width: 1
                     
-                    Rectangle { anchors.fill: parent; radius: 12; color: window.ambientPrimary; opacity: 0.05; Behavior on color { ColorAnimation { duration: 1000 } } }
+                    Rectangle { anchors.fill: parent; radius: 10; color: window.ambientPrimary; opacity: 0.05; Behavior on color { ColorAnimation { duration: 1000 } } }
                     Column {
                         anchors.centerIn: parent
                         Text { 
@@ -270,10 +268,10 @@ Item {
 
                 // Mins Box
                 Rectangle {
-                    width: 44; height: 48; radius: 12
+                    width: 44; height: 48; radius: 10
                     color: "#0dffffff"; border.color: "#1affffff"; border.width: 1
                     
-                    Rectangle { anchors.fill: parent; radius: 12; color: window.ambientSecondary; opacity: 0.05; Behavior on color { ColorAnimation { duration: 1000 } } }
+                    Rectangle { anchors.fill: parent; radius: 10; color: window.ambientSecondary; opacity: 0.05; Behavior on color { ColorAnimation { duration: 1000 } } }
                     Column {
                         anchors.centerIn: parent
                         Text { 
@@ -297,7 +295,7 @@ Item {
                 anchors.top: parent.top; anchors.right: parent.right
                 anchors.margins: 25
                 width: logoutMa.containsMouse ? 44 + usernameText.implicitWidth + 12 : 44
-                height: 44; radius: 22
+                height: 44; radius: 14
                 color: logoutMa.containsMouse ? "#1affffff" : "transparent"
                 border.color: logoutMa.containsMouse ? "#33ffffff" : "transparent"
                 clip: true
@@ -538,7 +536,7 @@ Item {
                             
                             Text {
                                 font.family: "Iosevka Nerd Font"
-                                font.pixelSize: 32
+                                font.pixelSize: 28
                                 color: window.batColorStart
                                 text: window.isCharging ? "󰂄" : (window.batCapacity > 20 ? "󰁹" : "󰂃")
                                 Behavior on color { ColorAnimation { duration: 400 } }
@@ -595,7 +593,7 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 96
-                    radius: 24
+                    radius: 14
                     color: "#05ffffff"
                     border.color: "#1affffff"
                     border.width: 1
@@ -782,7 +780,7 @@ Item {
                     }
                 }
 
-                // 2. SYSTEM ACTIONS DOCK
+                // 2. SYSTEM ACTIONS DOCK - No Text, Monochromatic Waves, Big Icons
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 75
@@ -790,17 +788,22 @@ Item {
                     
                     Repeater {
                         model: ListModel {
-                            ListElement { lbl: "Lock"; cmd: "quickshell -p ~/.config/hypr/scripts/quickshell/Lock.qml"; icon: ""; c1: "#cba6f7"; c2: "#f5c2e7"; weight: 1.0 }
-                            ListElement { lbl: "Sleep"; cmd: "quickshell -p ~/.config/hypr/scripts/quickshell/Lock.qml & systemctl suspend"; icon: "ᶻ 𝗓 𐰁"; c1: "#89b4fa"; c2: "#74c7ec"; weight: 1.0 }
-                            ListElement { lbl: "Reboot"; cmd: "systemctl reboot"; icon: "󰑓"; c1: "#f9e2af"; c2: "#fab387"; weight: 2.5 }
-                            ListElement { lbl: "Power"; cmd: "systemctl poweroff"; icon: ""; c1: "#f38ba8"; c2: "#eba0ac"; weight: 3.5 }
+                            ListElement { cmd: "quickshell -p ~/.config/hypr/scripts/quickshell/Lock.qml"; icon: ""; baseColor: "mauve"; weight: 1.0 }
+                            ListElement { cmd: "quickshell -p ~/.config/hypr/scripts/quickshell/Lock.qml & systemctl suspend"; icon: "ᶻ 𝗓 𐰁"; baseColor: "blue"; weight: 1.0 }
+                            ListElement { cmd: "systemctl reboot"; icon: "󰑓"; baseColor: "yellow"; weight: 2.5 }
+                            ListElement { cmd: "systemctl poweroff"; icon: ""; baseColor: "red"; weight: 3.5 }
                         }
                         
                         delegate: Rectangle {
                             id: actionCapsule
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            radius: 18
+                            radius: 14
+                            
+                            // Map string names to dynamically grab the Matugen property, then generate a lighter version for a smooth wave
+                            property color c1: window[baseColor] || window.surface1
+                            property color c2: Qt.lighter(c1, 1.2)
+
                             color: actionMa.containsMouse ? "#1affffff" : "#0dffffff"
                             border.color: actionMa.containsMouse ? c1 : "#1affffff"
                             border.width: actionMa.containsMouse ? 2 : 1
@@ -834,7 +837,7 @@ Item {
                                     ctx.clearRect(0, 0, width, height);
                                     if (actionCapsule.fillLevel <= 0.001) return;
                                     
-                                    var r = 18; 
+                                    var r = 14; 
                                     var fillY = height * (1.0 - actionCapsule.fillLevel);
                                     ctx.save();
                                     ctx.beginPath();
@@ -867,8 +870,8 @@ Item {
                                     ctx.closePath();
                                     
                                     var grad = ctx.createLinearGradient(0, 0, 0, height);
-                                    grad.addColorStop(0, c1);
-                                    grad.addColorStop(1, c2);
+                                    grad.addColorStop(0, actionCapsule.c1.toString());
+                                    grad.addColorStop(1, actionCapsule.c2.toString());
                                     ctx.fillStyle = grad;
                                     ctx.fill();
                                     ctx.restore();
@@ -876,25 +879,19 @@ Item {
                             }
 
                             Rectangle {
-                                anchors.fill: parent; radius: 18; color: "#ffffff"
+                                anchors.fill: parent; radius: 14; color: "#ffffff"
                                 opacity: actionCapsule.flashOpacity
                                 PropertyAnimation on opacity { id: cardFlashAnim; to: 0; duration: 500; easing.type: Easing.OutExpo }
                             }
 
-                            ColumnLayout {
-                                id: baseTextCol
+                            // Centered Big Icon (Idle State)
+                            Text { 
                                 anchors.centerIn: parent
-                                spacing: 4
-                                Text { 
-                                    Layout.alignment: Qt.AlignHCenter; font.family: "Iosevka Nerd Font"; font.pixelSize: 22
-                                    color: actionMa.containsMouse ? window.text : window.subtext0; text: icon
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-                                Text { 
-                                    Layout.alignment: Qt.AlignHCenter; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: 11
-                                    color: actionMa.containsMouse ? window.text : window.subtext0; text: actionCapsule.fillLevel > 0.1 ? "Hold" : lbl
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
+                                font.family: "Iosevka Nerd Font"
+                                font.pixelSize: 24
+                                color: actionMa.containsMouse ? window.text : window.subtext0
+                                text: icon
+                                Behavior on color { ColorAnimation { duration: 150 } }
                             }
 
                             Item {
@@ -902,12 +899,14 @@ Item {
                                 height: actionCapsule.height * actionCapsule.fillLevel
                                 clip: true
                                 
-                                ColumnLayout {
-                                    x: baseTextCol.x; y: baseTextCol.y - (actionCapsule.height - parent.height)
-                                    width: baseTextCol.width; height: baseTextCol.height
-                                    spacing: 4
-                                    Text { Layout.alignment: Qt.AlignHCenter; font.family: "Iosevka Nerd Font"; font.pixelSize: 22; color: window.crust; text: icon }
-                                    Text { Layout.alignment: Qt.AlignHCenter; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: 11; color: window.crust; text: actionCapsule.fillLevel > 0.1 ? "Hold" : lbl }
+                                // Centered Big Icon (Filled State)
+                                Text { 
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    y: (actionCapsule.height / 2) - (height / 2) - (actionCapsule.height - parent.height)
+                                    font.family: "Iosevka Nerd Font"
+                                    font.pixelSize: 24
+                                    color: window.crust
+                                    text: icon 
                                 }
                             }
 
@@ -957,7 +956,7 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 54
-                    radius: 27
+                    radius: 14
                     color: "#0dffffff" 
                     border.color: "#1affffff"
                     border.width: 1
@@ -967,7 +966,7 @@ Item {
                         width: (parent.width - 2) / 3 
                         height: parent.height - 2
                         y: 1
-                        radius: 26
+                        radius: 10
                         x: {
                             if (window.powerProfile === "performance") return 1;
                             if (window.powerProfile === "balanced") return width + 1;
