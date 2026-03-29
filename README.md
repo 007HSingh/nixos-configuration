@@ -1,6 +1,6 @@
 ## Previews of my desktop
 
-You can find all of my wallpapers **[HERE](https://github.com/ilyamiro/shell-wallpapers)**.
+### You can find all of my wallpapers **[HERE](https://github.com/ilyamiro/shell-wallpapers)**.
 
 ---
 
