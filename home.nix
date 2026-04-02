@@ -63,6 +63,7 @@ in
   
   home.sessionVariables = {
     # Left intentionally blank to prevent GTK variable overrides
+    SUDO_EDITOR="nvim -n";
   };
 
   services.easyeffects.enable = true;  

@@ -952,22 +952,34 @@ Item {
                         Layout.alignment: Qt.AlignRight
                         Layout.rightMargin: 10
                         spacing: 20
-                        opacity: window.weatherContentOpacity
-                        transform: Translate { x: window.weatherContentOffset }
 
                         Repeater {
-                            model: window.weatherData && window.weatherData.forecast[window.weatherView] ? [
-                                { icon: "", val: window.weatherData.forecast[window.weatherView].wind + "m/s", lbl: "WIND", fill: Math.min(1.0, window.weatherData.forecast[window.weatherView].wind / 25.0) },
-                                { icon: "", val: window.weatherData.forecast[window.weatherView].humidity + "%", lbl: "HUMID", fill: window.weatherData.forecast[window.weatherView].humidity / 100.0 },
-                                { icon: "", val: window.weatherData.forecast[window.weatherView].pop + "%", lbl: "RAIN", fill: window.weatherData.forecast[window.weatherView].pop / 100.0 },
-                                { icon: "", val: window.weatherData.forecast[window.weatherView].feels_like + "°", lbl: "FEELS", fill: Math.max(0.0, Math.min(1.0, (window.weatherData.forecast[window.weatherView].feels_like + 15) / 55.0)) }
-                            ] : []
+                            model: 4
 
                             Item {
                                 width: 68
                                 height: 100
                                 scale: gaugeMa.containsMouse ? 1.15 : 1.0
                                 Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
+
+                                property var forecast: window.weatherData && window.weatherData.forecast[window.targetWeatherView] ? window.weatherData.forecast[window.targetWeatherView] : null
+
+                                property string gaugeIcon: index === 0 ? "" : index === 1 ? "" : index === 2 ? "" : ""
+                                property string gaugeLbl: index === 0 ? "WIND" : index === 1 ? "HUMID" : index === 2 ? "RAIN" : "FEELS"
+
+                                property string gaugeVal: forecast ? (
+                                    index === 0 ? forecast.wind + "m/s" :
+                                    index === 1 ? forecast.humidity + "%" :
+                                    index === 2 ? forecast.pop + "%" :
+                                    forecast.feels_like + "°"
+                                ) : ""
+
+                                property real gaugeFill: forecast ? (
+                                    index === 0 ? Math.min(1.0, forecast.wind / 25.0) :
+                                    index === 1 ? forecast.humidity / 100.0 :
+                                    index === 2 ? forecast.pop / 100.0 :
+                                    Math.max(0.0, Math.min(1.0, (forecast.feels_like + 15) / 55.0))
+                                ) : 0.0
                                 
                                 Rectangle {
                                     anchors.top: parent.top
@@ -989,11 +1001,10 @@ Item {
                                         anchors.fill: parent
                                         rotation: -90 
                                         
-                                        property real progress: modelData.fill
-                                        property real animProgress: 0
+                                        property real animProgress: parent.parent.gaugeFill
                                         
-                                        NumberAnimation on animProgress {
-                                            to: gaugeCanvas.progress; duration: 1500; easing.type: Easing.OutExpo; running: true
+                                        Behavior on animProgress {
+                                            NumberAnimation { duration: 1000; easing.type: Easing.OutExpo }
                                         }
                                         
                                         onAnimProgressChanged: requestPaint()
@@ -1021,12 +1032,11 @@ Item {
                                                 ctx.stroke();
                                             }
                                         }
-                                        Behavior on progress { NumberAnimation { duration: 1000; easing.type: Easing.OutExpo } }
                                     }
                                     
                                     Text {
                                         anchors.centerIn: parent
-                                        text: modelData.val
+                                        text: parent.parent.gaugeVal
                                         font.family: "JetBrains Mono"
                                         font.weight: Font.Black
                                         font.pixelSize: 14
@@ -1040,14 +1050,14 @@ Item {
                                     spacing: 4
                                     
                                     Text { 
-                                        text: modelData.icon
+                                        text: parent.parent.gaugeIcon
                                         font.family: "Iosevka Nerd Font"
                                         font.pixelSize: 14
                                         color: gaugeMa.containsMouse ? window.textAccent : window.overlay0
                                         Behavior on color { ColorAnimation { duration: 200 } }
                                     }
                                     Text { 
-                                        text: modelData.lbl
+                                        text: parent.parent.gaugeLbl
                                         font.family: "JetBrains Mono"
                                         font.weight: Font.Bold
                                         font.pixelSize: 12

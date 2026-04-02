@@ -14,7 +14,7 @@
     initContent = builtins.readFile ./zsh-init.sh;
 
     shellAliases = {
-      edit = "sudo -E nvim -n";
+      edit = "sudoedit";
       gitavail = "ssh-add $HOME/Documents/Важное/recovery_keys/GitHub/github_remote_keys/key";
       update = "sudo nixos-rebuild switch";
       stop = "shutdown now";
