@@ -370,7 +370,6 @@ PanelWindow {
                             
                             Layout.preferredHeight: 32; radius: 10
                             
-                            // UPDATED: Shifted to surface2 for occupied, and overlay0 for hover to increase contrast
                             color: stateLabel === "active" 
                                     ? mocha.mauve 
                                     : (isHovered 
@@ -415,10 +414,11 @@ PanelWindow {
                                 font.pixelSize: 14
                                 font.weight: stateLabel === "active" ? Font.Black : (stateLabel === "occupied" ? Font.Bold : Font.Medium)
                                 
+                                // UPDATED: Now uses mocha.crust on hover for sharp contrast against the bright background
                                 color: stateLabel === "active" 
                                         ? mocha.crust 
                                         : (isHovered 
-                                            ? mocha.text 
+                                            ? mocha.crust 
                                             : (stateLabel === "occupied" ? mocha.text : mocha.overlay0))
                                         
                                 Behavior on color { ColorAnimation { duration: 250 } }
@@ -432,8 +432,10 @@ PanelWindow {
                         }
                     }
                 }
-            }
-            // Media Player 
+	    }            
+
+	    // Media Player 
+
             Rectangle {
                 id: mediaBox
                 color: Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)

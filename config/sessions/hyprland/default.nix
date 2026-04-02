@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, pkgs-unstable, ... }:
 
 {
   imports = [
@@ -28,7 +28,6 @@
     gtk3
     cava
     cliphist
-    hyprlock
     tree
     jq
     socat 

@@ -8,18 +8,15 @@ daily_cache_file="${cache_dir}/daily_weather_cache.json"
 next_day_cache_file="${cache_dir}/next_day_precache.json"
 
 # API Settings
-# Load environment variables
+# Load environment variables silently
 if [ -f "$(dirname "$0")/.env" ]; then
     export $(grep -v '^#' "$(dirname "$0")/.env" | xargs)
-else
-    echo ".env file not found!"
-    exit 1
 fi
 
 # API Settings from .env
 KEY="$OPENWEATHER_KEY"
 ID="$OPENWEATHER_CITY_ID"
-UNIT="$OPENWEATHER_UNIT"
+UNIT="${OPENWEATHER_UNIT:-metric}" # Default to metric if not set
 
 mkdir -p "${cache_dir}"
 
@@ -39,74 +36,93 @@ get_icon() {
 
 get_hex() {
     case $1 in
-        "50d"|"50n") echo "#84afdb" ;; 
-        "01d") echo "#f9e2af" ;;        
-        "01n") echo "#cba6f7" ;;        
-        "02d"|"02n"|"03d"|"03n"|"04d"|"04n") echo "#bac2de" ;; 
-        "09d"|"09n"|"10d"|"10n") echo "#74c7ec" ;; 
-        "11d"|"11n") echo "#f9e2af" ;; 
-        "13d"|"13n") echo "#cdd6f4" ;; 
+        "50d"|"50n") echo "#84afdb" ;;
+        "01d") echo "#f9e2af" ;;
+        "01n") echo "#cba6f7" ;;
+        "02d"|"02n"|"03d"|"03n"|"04d"|"04n") echo "#bac2de" ;;
+        "09d"|"09n"|"10d"|"10n") echo "#74c7ec" ;;
+        "11d"|"11n") echo "#f9e2af" ;;
+        "13d"|"13n") echo "#cdd6f4" ;;
         *) echo "#cdd6f4" ;;
     esac
 }
 
 get_data() {
+    # ---------------------------------------------------------
+    # DUMMY DATA FALLBACK (If API key is missing or skipped)
+    # ---------------------------------------------------------
+    if [[ -z "$KEY" || "$KEY" == "Skipped" || "$KEY" == "OPENWEATHER_KEY" ]]; then
+        final_json="["
+        for i in {0..4}; do
+            future_date=$(date -d "+$i days")
+            f_day=$(date -d "$future_date" "+%a")
+            f_full_day=$(date -d "$future_date" "+%A")
+            f_date_num=$(date -d "$future_date" "+%d %b")
+            
+            final_json="${final_json} {
+                \"id\": \"${i}\",
+                \"day\": \"${f_day}\",
+                \"day_full\": \"${f_full_day}\",
+                \"date\": \"${f_date_num}\",
+                \"max\": \"0.0\",
+                \"min\": \"0.0\",
+                \"feels_like\": \"0.0\",
+                \"wind\": \"0\",
+                \"humidity\": \"0\",
+                \"pop\": \"0\",
+                \"icon\": \"\",
+                \"hex\": \"#cdd6f4\",
+                \"desc\": \"No API Key\",
+                \"hourly\": [{\"time\": \"00:00\", \"temp\": \"0.0\", \"icon\": \"\", \"hex\": \"#cdd6f4\"}]
+            },"
+        done
+        final_json="${final_json%,}]"
+        echo "{ \"forecast\": ${final_json} }" > "${json_file}"
+        return
+    fi
+
+    # ---------------------------------------------------------
+    # STANDARD API FETCH LOGIC
+    # ---------------------------------------------------------
     forecast_url="http://api.openweathermap.org/data/2.5/forecast?APPID=${KEY}&id=${ID}&units=${UNIT}"
     raw_api=$(curl -sf "$forecast_url")
-
+    
     # If API fails, stop
     if [ -z "$raw_api" ]; then return; fi
 
     current_date=$(date +%Y-%m-%d)
     tomorrow_date=$(date -d "tomorrow" +%Y-%m-%d)
 
-    # ---------------------------------------------------------
-    # 1. ROLLOVER CHECK (Did we save data yesterday for today?)
-    # ---------------------------------------------------------
+    # 1. ROLLOVER CHECK
     if [ -f "$next_day_cache_file" ]; then
         precache_date=$(cat "$next_day_cache_file" | jq -r '.[0].dt_txt' | cut -d' ' -f1)
-        
-        # If the pre-cache is actually for TODAY, move it to the daily cache
         if [ "$precache_date" == "$current_date" ]; then
             mv "$next_day_cache_file" "$daily_cache_file"
         fi
     fi
 
-    # ---------------------------------------------------------
-    # 2. PROCESS TODAY (Merge Cache + API)
-    # ---------------------------------------------------------
+    # 2. PROCESS TODAY
     api_today_items=$(echo "$raw_api" | jq -c ".list[] | select(.dt_txt | startswith(\"$current_date\"))" | jq -s '.')
 
     if [ -f "$daily_cache_file" ]; then
         cached_date=$(cat "$daily_cache_file" | jq -r '.[0].dt_txt' | cut -d' ' -f1)
-        
         if [ "$cached_date" == "$current_date" ]; then
-            # Merge: Take Cache + API, Unique by timestamp, Sort by time
             merged_today=$(echo "$api_today_items" | jq --slurpfile cache "$daily_cache_file" \
                 '($cache[0] + .) | unique_by(.dt) | sort_by(.dt)')
         else
-            # Cache is old/irrelevant, overwrite with API
             merged_today="$api_today_items"
         fi
     else
         merged_today="$api_today_items"
     fi
 
-    # Save Today's Cache
     echo "$merged_today" > "$daily_cache_file"
 
-    # ---------------------------------------------------------
-    # 3. PRE-CACHE TOMORROW (The Future-Proofing Step)
-    # ---------------------------------------------------------
-    # Extract all data for TOMORROW from the API and save it.
-    # When tomorrow comes, this file will be moved to 'daily_cache_file' by Step 1.
+    # 3. PRE-CACHE TOMORROW
     api_tomorrow_items=$(echo "$raw_api" | jq -c ".list[] | select(.dt_txt | startswith(\"$tomorrow_date\"))" | jq -s '.')
     echo "$api_tomorrow_items" > "$next_day_cache_file"
 
-
-    # ---------------------------------------------------------
-    # 4. BUILD FINAL JSON (Today + Rest of Future)
-    # ---------------------------------------------------------
+    # 4. BUILD FINAL JSON
     processed_forecast=$(echo "$raw_api" | jq --argjson today "$merged_today" --arg date "$current_date" \
         '.list = ($today + [.list[] | select(.dt_txt | startswith($date) | not)])')
 
@@ -119,8 +135,6 @@ get_data() {
         for d in $dates; do
             day_data=$(echo "$processed_forecast" | jq "[.list[] | select(.dt_txt | startswith(\"$d\"))]")
 
-            # Daily Stats
-            # CHANGED: Removed "| round" and used printf for decimals
             raw_max=$(echo "$day_data" | jq '[.[].main.temp_max] | max')
             f_max_temp=$(printf "%.1f" "$raw_max")
 
@@ -135,7 +149,6 @@ get_data() {
             f_wind=$(echo "$day_data" | jq '[.[].wind.speed] | max | round')
             f_hum=$(echo "$day_data" | jq '[.[].main.humidity] | add / length | round')
             
-            # Icon
             f_code=$(echo "$day_data" | jq -r '.[length/2 | floor].weather[0].icon')
             f_desc=$(echo "$day_data" | jq -r '.[length/2 | floor].weather[0].description' | sed -e "s/\b\(.\)/\u\1/g")
             f_icon_data=$(get_icon "$f_code")
@@ -146,7 +159,6 @@ get_data() {
             f_full_day=$(date -d "$d" "+%A")
             f_date_num=$(date -d "$d" "+%d %b")
 
-            # Hourly Slots
             hourly_json="["
             count_slots=$(echo "$day_data" | jq '. | length')
             count_slots=$((count_slots-1))
@@ -154,7 +166,6 @@ get_data() {
             for i in $(seq 0 1 $count_slots); do
                 slot_item=$(echo "$day_data" | jq ".[$i]")
                 
-                # CHANGED: Removed "cut" and used printf for decimals
                 raw_s_temp=$(echo "$slot_item" | jq ".main.temp")
                 s_temp=$(printf "%.1f" "$raw_s_temp")
                 
@@ -193,12 +204,11 @@ get_data() {
 }
 
 # --- MODE HANDLING ---
-if [[ "$1" == "--getdata" ]]; then 
+if [[ "$1" == "--getdata" ]]; then
     get_data
-elif [[ "$1" == "--json" ]]; then
-    # Cache Limit: 15 minutes
-    CACHE_LIMIT=900
 
+elif [[ "$1" == "--json" ]]; then
+    CACHE_LIMIT=900
     if [ -f "$json_file" ]; then
         file_time=$(stat -c %Y "$json_file")
         current_time=$(date +%s)
@@ -216,6 +226,7 @@ elif [[ "$1" == "--json" ]]; then
 elif [[ "$1" == "--view-listener" ]]; then
     if [ ! -f "$view_file" ]; then echo "0" > "$view_file"; fi
     tail -F "$view_file"
+
 elif [[ "$1" == "--nav" ]]; then
     if [ ! -f "$view_file" ]; then echo "0" > "$view_file"; fi
     current=$(cat "$view_file")
@@ -232,19 +243,28 @@ elif [[ "$1" == "--nav" ]]; then
             echo "$new" > "$view_file"
         fi
     fi
-elif [[ "$1" == "--icon" ]]; then cat "$json_file" | jq -r '.forecast[0].icon'
-elif [[ "$1" == "--temp" ]]; then t=$(cat "$json_file" | jq -r '.forecast[0].max'); echo "${t}°C"
-elif [[ "$1" == "--hex" ]]; then cat "$json_file" | jq -r '.forecast[0].hex'
+
+elif [[ "$1" == "--icon" ]]; then
+    cat "$json_file" | jq -r '.forecast[0].icon'
+
+elif [[ "$1" == "--temp" ]]; then 
+    t=$(cat "$json_file" | jq -r '.forecast[0].max')
+    echo "${t}°C"
+
+elif [[ "$1" == "--hex" ]]; then 
+    cat "$json_file" | jq -r '.forecast[0].hex'
 
 # --- NEW HOURLY MODES FOR TOPBAR ---
-elif [[ "$1" == "--current-icon" ]]; then 
+elif [[ "$1" == "--current-icon" ]]; then
     curr_time=$(date +%H:%M)
     cat "$json_file" | jq -r --arg ct "$curr_time" '(.forecast[0].hourly | map(select(.time <= $ct)) | last) // .forecast[0].hourly[0] | .icon'
+
 elif [[ "$1" == "--current-temp" ]]; then 
     curr_time=$(date +%H:%M)
     t=$(cat "$json_file" | jq -r --arg ct "$curr_time" '(.forecast[0].hourly | map(select(.time <= $ct)) | last) // .forecast[0].hourly[0] | .temp')
     echo "${t}°C"
-elif [[ "$1" == "--current-hex" ]]; then 
+
+elif [[ "$1" == "--current-hex" ]]; then
     curr_time=$(date +%H:%M)
     cat "$json_file" | jq -r --arg ct "$curr_time" '(.forecast[0].hourly | map(select(.time <= $ct)) | last) // .forecast[0].hourly[0] | .hex'
 fi

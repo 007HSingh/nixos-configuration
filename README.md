@@ -2,7 +2,13 @@
 
 ### You can find all of my wallpapers **[HERE](https://github.com/ilyamiro/shell-wallpapers)**.
 
-#### Update 30.03.26
+## I AM CURRENTLY LOOKING FOR INSTALL SCRIPTS TESTERS FOR ARCH LINUX AND ITS DERIVATIVES. REACH OUT TO ME FOR INFORMATION. 
+#### twitter/x: @ilyamirox
+#### reddit: r/ilyamiro1
+#### telegram: @sacrificeit
+#### email: ilyamiro.work@gmail.com
+
+### Update 30.03.26
 As of now, due to an increased demand, I am working on installation scripts. The first version will be out in the span of the next 7 days. Thank you for your support!
 
 ---
