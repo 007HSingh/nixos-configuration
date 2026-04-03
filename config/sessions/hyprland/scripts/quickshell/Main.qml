@@ -52,6 +52,7 @@ FloatingWindow {
         let base = {
             // Right-aligned: pinned 20px from the right edge dynamically
             "battery":   { w: 480, h: 760, rx: mw - 500, ry: 70, comp: "battery/BatteryPopup.qml" },
+            "volume":    { w: 480, h: 760, rx: mw - 500, ry: 70, comp: "volume/VolumePopup.qml" },
             
             // Centered horizontally dynamically based on current screen width
             "calendar":  { w: 1450, h: 750, rx: Math.floor((mw/2)-(1450/2)), ry: 70, comp: "calendar/CalendarPopup.qml" },
