@@ -9,6 +9,8 @@
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)"
 ```
 
+## DO NOT LAUNCH THIS AS ROOT!
+
 ---
 
 ![preview1](previews/screenshot1.png)
