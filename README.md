@@ -1,13 +1,8 @@
-## Previews of my desktop
+## Arch installer now in alpha testing mode available for everyone. Just run this: 
 
-## You can find all of my wallpapers **[HERE](https://github.com/ilyamiro/shell-wallpapers)**.
-
-### FOR ANY PROBLEMS, contact me:
-- Reddit: r/ilyamiro1
-- X/Twitter: @ilyamirox
-- Discord: @ilyamiro
-- Email: ilyamiro.work@gmail.com
-- Telegram: @sacrificeit
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)"
+```
 
 > [!WARNING]
 > DO NOT LAUNCH THIS AS ROOT!
@@ -15,11 +10,18 @@
 > [!NOTE]
 > This installer sends anonymous non-identifying telemetry that helps me debug problems and track the amount of users
 
-### Arch installer now in alpha testing mode available for everyone. Just run this: 
+### You can find all of my wallpapers **[HERE](https://github.com/ilyamiro/shell-wallpapers)**.
 
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)"
-```
+### FOR ANY PROBLEMS, contact me:
+
+* Reddit: [https://reddit.com/r/ilyamiro1](https://reddit.com/r/ilyamiro1)
+* X/Twitter: [https://twitter.com/ilyamirox](https://twitter.com/ilyamirox)
+* Discord: [https://discord.com/users/ilyamiro](https://discord.com/users/ilyamiro)
+* Email: [ilyamiro.work@gmail.com](mailto:ilyamiro.work@gmail.com)
+* Telegram: [https://t.me/sacrificeit](https://t.me/sacrificeit)
+
+
+## Previews of my desktop
 
 ---
 
@@ -33,3 +35,4 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots
 ![preview1_1](previews/screenshot1_1.png)
 ![preview9](previews/screenshot9.png)
 ![preview3](previews/screenshot3.png)
+
