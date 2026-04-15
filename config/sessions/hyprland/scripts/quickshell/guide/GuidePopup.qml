@@ -30,6 +30,29 @@ Item {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
+    function compareVersions(local, remote) {
+        if (local === remote || local === "Unknown" || local === "Loading..." || !local || !remote) return false;
+
+        function parseVersion(v) {
+            let parts = v.split('-');
+            let base = parts[0].split('.').map(Number);
+            let rev = parts.length > 1 ? parseInt(parts[1]) : 0;
+            return { base: base, rev: rev };
+        }
+
+        let l = parseVersion(local);
+        let r = parseVersion(remote);
+
+        for (let i = 0; i < Math.max(l.base.length, r.base.length); i++) {
+            let lVal = l.base[i] || 0;
+            let rVal = r.base[i] || 0;
+            if (lVal < rVal) return true;
+            if (lVal > rVal) return false;
+        }
+
+        return l.rev < r.rev;
+    }
+
     // -------------------------------------------------------------------------
     // KEYBOARD SHORTCUTS & NAVIGATION
     // -------------------------------------------------------------------------
@@ -107,7 +130,7 @@ Item {
     property color ambientBlue: Qt.tint(root.blue, Qt.rgba(root.sapphire.r, root.sapphire.g, root.sapphire.b, colorBlend))
 
     // -------------------------------------------------------------------------
-    // SSOT GLOBAL SETTINGS
+    // SSOT GLOBAL SETTINGS & UPDATES
     // -------------------------------------------------------------------------
     property real setUiScale: 1.0
     property bool setOpenGuideAtStartup: true
@@ -119,7 +142,53 @@ Item {
         : Quickshell.env("HOME") + "/Pictures/Wallpapers"
     }
     property string setLanguage: ""
+    property string setKbOptions: "grp:alt_shift_toggle"
     property string dotsVersion: "Loading..."
+    property string remoteVersion: ""
+    property bool updateAvailable: false
+
+    property var kbToggleModelArr: [
+        { label: "Alt + Shift", val: "grp:alt_shift_toggle" },
+        { label: "Win + Space", val: "grp:win_space_toggle" },
+        { label: "Caps Lock", val: "grp:caps_toggle" },
+        { label: "Ctrl + Shift", val: "grp:ctrl_shift_toggle" },
+        { label: "Ctrl + Alt", val: "grp:ctrl_alt_toggle" },
+        { label: "Right Alt", val: "grp:toggle" },
+        { label: "No Toggle", val: "" }
+    ]
+
+    function getKbToggleLabel(val) {
+        for (let i = 0; i < root.kbToggleModelArr.length; i++) {
+            if (root.kbToggleModelArr[i].val === val) return root.kbToggleModelArr[i].label;
+        }
+        return "Alt + Shift";
+    }
+
+    onDotsVersionChanged: {
+        if (remoteVersion !== "" && dotsVersion !== "Loading...") {
+            updateAvailable = compareVersions(dotsVersion, remoteVersion);
+        }
+    }
+
+    onRemoteVersionChanged: {
+        if (remoteVersion !== "" && dotsVersion !== "Loading...") {
+            updateAvailable = compareVersions(dotsVersion, remoteVersion);
+        }
+    }
+
+    Timer {
+        id: updateNotifyTimer
+        interval: 900000 // 15 minutes in milliseconds
+        running: root.updateAvailable
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            // Bash script checks a cache file for the last notification time (900 seconds = 15 mins).
+            // Uses notify-send with -t 60000 to keep the notification on screen for 60 seconds.
+            let cmd = "FILE=\"$HOME/.cache/qs_update_notified\"; NOW=$(date +%s); if [ -f \"$FILE\" ]; then LAST=$(cat \"$FILE\"); DIFF=$((NOW - LAST)); if [ $DIFF -lt 900 ]; then exit 0; fi; fi; echo $NOW > \"$FILE\"; notify-send -t 60000 -a 'Imperative Dots' -u normal 'Update Available' 'A new version is ready! Open the config guide to apply.'";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+        }
+    }
 
     function saveAppSettings() {
         let config = {
@@ -127,7 +196,8 @@ Item {
             "openGuideAtStartup": root.setOpenGuideAtStartup,
             "topbarHelpIcon": root.setTopbarHelpIcon,
             "wallpaperDir": root.setWallpaperDir,
-            "language": root.setLanguage
+            "language": root.setLanguage,
+            "kbOptions": root.setKbOptions
         };
         let jsonString = JSON.stringify(config, null, 2);
         
@@ -144,6 +214,18 @@ Item {
             onStreamFinished: {
                 let out = this.text ? this.text.trim() : "";
                 if (out !== "") root.dotsVersion = out;
+            }
+        }
+    }
+
+    Process {
+        id: updateChecker
+        command: ["bash", "-c", "curl -m 5 -s https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh | grep '^DOTS_VERSION=' | cut -d'\"' -f2"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let out = this.text ? this.text.trim() : "";
+                if (out !== "") root.remoteVersion = out;
             }
         }
     }
@@ -176,6 +258,7 @@ Item {
                         if (parsed.topbarHelpIcon !== undefined) root.setTopbarHelpIcon = parsed.topbarHelpIcon;
                         if (parsed.wallpaperDir !== undefined) root.setWallpaperDir = parsed.wallpaperDir;
                         if (parsed.language !== undefined && parsed.language !== "") root.setLanguage = parsed.language;
+                        if (parsed.kbOptions !== undefined) root.setKbOptions = parsed.kbOptions;
                     } else {
                         root.saveAppSettings();
                     }
@@ -396,8 +479,8 @@ Item {
     // -------------------------------------------------------------------------
     property int currentTab: 0
     property int selectedModuleIndex: 0
-    property var tabNames: ["System", "Settings", "Resources", "Modules", "Keybinds", "Matugen", "Weather", "Greeter"]
-    property var tabIcons: ["", "", "󰣖", "󰣆", "󰌌", "󰏘", "󰖐", "󰍃"]
+    property var tabNames: ["System", "Settings", "Resources", "Modules", "Keybinds", "Matugen", "Weather", "Greeter", "About"]
+    property var tabIcons: ["", "", "󰣖", "󰣆", "󰌌", "󰏘", "󰖐", "󰍃", ""]
 
     property real introBase: 0.0
     property real introSidebar: 0.0
@@ -719,6 +802,58 @@ Item {
 
                 Item { Layout.fillHeight: true }
 
+                // --- UPDATE AVAILABLE BUTTON ---
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.updateAvailable ? root.s(50) : 0
+                    visible: root.updateAvailable
+                    opacity: root.updateAvailable ? 1.0 : 0.0
+                    radius: root.s(8)
+                    color: updateHover.containsMouse ? Qt.alpha(root.green, 0.15) : Qt.alpha(root.green, 0.05)
+                    border.color: updateHover.containsMouse ? root.green : Qt.alpha(root.green, 0.4)
+                    border.width: 1
+                    scale: updateHover.pressed ? 0.96 : (updateHover.containsMouse ? 1.02 : 1.0)
+                    clip: true
+                    
+                    Behavior on Layout.preferredHeight { NumberAnimation { duration: 300; easing.type: Easing.OutQuart } }
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: root.s(2)
+                        
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: root.s(6)
+                            Text { text: "󰚰"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(14); color: root.green }
+                            Text { text: "Update Available"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.green }
+                        }
+                        
+                        Text {
+                            text: root.dotsVersion + "  " + root.remoteVersion
+                            font.family: "JetBrains Mono"
+                            font.pixelSize: root.s(10)
+                            color: root.subtext0
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+                    }
+
+                    MouseArea {
+                        id: updateHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            let cmd = "if command -v kitty >/dev/null 2>&1; then kitty --hold bash -c 'eval \"$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)\"'; else ${TERM:-xterm} -hold -e bash -c 'eval \"$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)\"'; fi";
+                            Quickshell.execDetached(["bash", "-c", cmd]);
+                        }
+                    }
+                }
+
+                // --- CLOSE BUTTON ---
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.s(44)
@@ -1187,6 +1322,7 @@ Item {
             // TAB 1: SETTINGS (SSOT Implementation)
             // ------------------------------------------
             Item {
+                id: settingsTab
                 anchors.fill: parent
                 visible: root.currentTab === 1
                 opacity: visible ? 1.0 : 0.0
@@ -1559,86 +1695,176 @@ Item {
                         }
                     }
 
-                    // Setting Box 3: Keyboard Language 
+                    // Setting Box 3: Keyboard Language & Switcher
                     Rectangle {
                         z: 10
                         Layout.fillWidth: true
-                        Layout.minimumHeight: root.s(80)
-                        implicitHeight: langBoxContent.implicitHeight + root.s(30)
+                        implicitHeight: kbCol.implicitHeight
                         radius: root.s(8)
                         color: Qt.alpha(root.surface0, 0.4)
                         border.color: root.surface1
                         border.width: 1
                         
-                        RowLayout {
-                            id: langBoxContent
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.margins: root.s(15)
-                            spacing: root.s(20)
+                        ColumnLayout {
+                            id: kbCol
+                            anchors.fill: parent
+                            spacing: 0
                             
+                            // --- Part 1: Language ---
                             Item {
-                                Layout.preferredWidth: settingsMainCol.iconColWidth
-                                Layout.alignment: Qt.AlignTop
-                                Layout.topMargin: root.s(5)
-                                Text { anchors.centerIn: parent; text: "󰌌"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(20); color: root.green }
-                            }
-                            
-                            ColumnLayout {
                                 Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignTop
-                                spacing: root.s(4)
-                                Text { text: "System keyboard layouts"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(13); color: root.text }
-                                Text { text: "Active layouts matched directly to hyprland.conf. Click ✖ to remove."; font.family: "JetBrains Mono"; font.pixelSize: root.s(11); color: root.subtext0; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                                
-                                Flow {
-                                    Layout.fillWidth: true
-                                    spacing: root.s(8)
-                                    Layout.topMargin: root.s(5)
+                                Layout.preferredHeight: langBoxContent.implicitHeight + root.s(30)
+
+                                RowLayout {
+                                    id: langBoxContent
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.margins: root.s(15)
+                                    spacing: root.s(20)
                                     
-                                    Repeater {
-                                        model: root.setLanguage ? root.setLanguage.split(",").filter(x => x.trim() !== "") : []
+                                    Item {
+                                        Layout.preferredWidth: settingsMainCol.iconColWidth
+                                        Layout.alignment: Qt.AlignTop
+                                        Layout.topMargin: root.s(5)
+                                        Text { anchors.centerIn: parent; text: "󰌌"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(20); color: root.green }
+                                    }
+                                    
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignTop
+                                        spacing: root.s(4)
+                                        Text { text: "System keyboard layouts"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(13); color: root.text }
+                                        Text { text: "Active layouts matched directly to hyprland.conf. Click ✖ to remove."; font.family: "JetBrains Mono"; font.pixelSize: root.s(11); color: root.subtext0; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                                         
-                                        Rectangle {
-                                            width: langChipLayout.implicitWidth + root.s(24)
-                                            height: root.s(30)
-                                            radius: root.s(15)
-                                            color: root.surface1
-                                            border.color: root.surface2
-                                            border.width: 1
+                                        Flow {
+                                            Layout.fillWidth: true
+                                            spacing: root.s(8)
+                                            Layout.topMargin: root.s(5)
                                             
-                                            RowLayout {
-                                                id: langChipLayout
-                                                anchors.centerIn: parent
-                                                spacing: root.s(8)
+                                            Repeater {
+                                                model: root.setLanguage ? root.setLanguage.split(",").filter(x => x.trim() !== "") : []
                                                 
-                                                Text { 
-                                                    text: modelData
-                                                    font.family: "JetBrains Mono"
-                                                    font.weight: Font.Bold
-                                                    font.pixelSize: root.s(13)
-                                                    color: root.text 
-                                                }
-                                                
-                                                Text { 
-                                                    text: "✖"
-                                                    font.family: "JetBrains Mono"
-                                                    font.pixelSize: root.s(14)
-                                                    color: chipMa.containsMouse ? root.red : root.subtext0
-                                                    Behavior on color { ColorAnimation { duration: 150 } } 
+                                                Rectangle {
+                                                    width: langChipLayout.implicitWidth + root.s(24)
+                                                    height: root.s(30)
+                                                    radius: root.s(15)
+                                                    color: root.surface1
+                                                    border.color: root.surface2
+                                                    border.width: 1
+                                                    
+                                                    RowLayout {
+                                                        id: langChipLayout
+                                                        anchors.centerIn: parent
+                                                        spacing: root.s(8)
+                                                        
+                                                        Text { 
+                                                            text: modelData
+                                                            font.family: "JetBrains Mono"
+                                                            font.weight: Font.Bold
+                                                            font.pixelSize: root.s(13)
+                                                            color: root.text 
+                                                        }
+                                                        
+                                                        Text { 
+                                                            text: "✖"
+                                                            font.family: "JetBrains Mono"
+                                                            font.pixelSize: root.s(14)
+                                                            color: chipMa.containsMouse ? root.red : root.subtext0
+                                                            Behavior on color { ColorAnimation { duration: 150 } } 
+                                                        }
+                                                    }
+                                                    
+                                                    MouseArea {
+                                                        id: chipMa
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            let arr = root.setLanguage.split(",").filter(x => x.trim() !== "");
+                                                            arr.splice(index, 1);
+                                                            root.setLanguage = arr.join(",");
+                                                        }
+                                                    }
                                                 }
                                             }
+                                        }
+                                    }
+                                    
+                                    Item {
+                                        Layout.preferredWidth: settingsMainCol.controlColWidth
+                                        Layout.fillHeight: true
+                                        Layout.alignment: Qt.AlignTop
+                                        
+                                        Rectangle {
+                                            anchors.top: parent.top
+                                            anchors.right: parent.right
+                                            anchors.topMargin: root.s(5)
+                                            width: parent.width
+                                            height: root.s(32)
+                                            radius: root.s(6)
+                                            color: root.surface0
+                                            border.color: langInput.activeFocus ? root.green : root.surface2
+                                            border.width: 1
                                             
-                                            MouseArea {
-                                                id: chipMa
+                                            TextInput {
+                                                id: langInput
                                                 anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    let arr = root.setLanguage.split(",").filter(x => x.trim() !== "");
-                                                    arr.splice(index, 1);
-                                                    root.setLanguage = arr.join(",");
+                                                anchors.margins: root.s(8)
+                                                verticalAlignment: TextInput.AlignVCenter
+                                                font.family: "JetBrains Mono"
+                                                font.pixelSize: root.s(12)
+                                                color: root.text
+                                                clip: true
+                                                selectByMouse: true
+                                                onTextChanged: { settingsTab.updateLangSearch(text); }
+                                                Text { text: "Search to add..."; color: root.subtext0; visible: !parent.text && !parent.activeFocus; font: parent.font; anchors.verticalCenter: parent.verticalCenter }
+                                            }
+                                            
+                                            Rectangle {
+                                                width: parent.width
+                                                height: Math.min(root.s(150), langSearchModel.count * root.s(30))
+                                                y: parent.height + root.s(4)
+                                                radius: root.s(6)
+                                                color: root.surface0
+                                                border.color: root.green
+                                                border.width: 1
+                                                visible: langInput.activeFocus && langSearchModel.count > 0 && langInput.text.trim() !== ""
+                                                clip: true
+                                                
+                                                ListView {
+                                                    anchors.fill: parent
+                                                    model: langSearchModel
+                                                    interactive: true
+                                                    ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
+                                                    delegate: Rectangle {
+                                                        width: parent.width
+                                                        height: root.s(30)
+                                                        color: sMa.containsMouse ? root.surface2 : "transparent"
+                                                        RowLayout {
+                                                            anchors.fill: parent
+                                                            anchors.leftMargin: root.s(10)
+                                                            anchors.rightMargin: root.s(10)
+                                                            spacing: root.s(8)
+                                                            Text { text: model.code; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.text }
+                                                            Text { text: model.name; font.family: "JetBrains Mono"; font.pixelSize: root.s(11); color: root.subtext0; elide: Text.ElideRight; Layout.fillWidth: true }
+                                                        }
+                                                        MouseArea {
+                                                            id: sMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                let arr = root.setLanguage ? root.setLanguage.split(",").filter(x => x.trim() !== "") : [];
+                                                                if (!arr.includes(model.code)) {
+                                                                    arr.push(model.code);
+                                                                    root.setLanguage = arr.join(",");
+                                                                }
+                                                                langInput.text = "";
+                                                                langInput.focus = false;
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -1646,77 +1872,114 @@ Item {
                                 }
                             }
 
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Qt.alpha(root.surface1, 0.5) }
+
+                            // --- Part 2: Layout Switcher ---
                             Item {
-                                Layout.preferredWidth: settingsMainCol.controlColWidth
-                                Layout.fillHeight: true
-                                Layout.alignment: Qt.AlignTop
-                                
-                                Rectangle {
-                                    anchors.top: parent.top
-                                    anchors.right: parent.right
-                                    anchors.topMargin: root.s(5)
-                                    width: parent.width
-                                    height: root.s(32)
-                                    radius: root.s(6)
-                                    color: root.surface0
-                                    border.color: langInput.activeFocus ? root.green : root.surface2
-                                    border.width: 1
-                                    
-                                    TextInput {
-                                        id: langInput
-                                        anchors.fill: parent
-                                        anchors.margins: root.s(8)
-                                        verticalAlignment: TextInput.AlignVCenter
-                                        font.family: "JetBrains Mono"
-                                        font.pixelSize: root.s(12)
-                                        color: root.text
-                                        clip: true
-                                        selectByMouse: true
-                                        onTextChanged: { parent.parent.parent.parent.parent.parent.updateLangSearch(text); }
-                                        Text { text: "Search to add..."; color: root.subtext0; visible: !parent.text && !parent.activeFocus; font: parent.font; anchors.verticalCenter: parent.verticalCenter }
+                                id: layoutSwitcherBox
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: root.s(60)
+                                property bool isDropdownOpen: false
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: root.s(15)
+                                    spacing: root.s(20)
+
+                                    Item {
+                                        Layout.preferredWidth: settingsMainCol.iconColWidth
+                                        Layout.alignment: Qt.AlignVCenter
+                                        Text { anchors.centerIn: parent; text: "󰌌"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(20); color: root.green }
                                     }
-                                    
-                                    Rectangle {
-                                        width: parent.width
-                                        height: Math.min(root.s(150), langSearchModel.count * root.s(30))
-                                        y: parent.height + root.s(4)
-                                        radius: root.s(6)
-                                        color: root.surface0
-                                        border.color: root.green
-                                        border.width: 1
-                                        visible: langInput.activeFocus && langSearchModel.count > 0 && langInput.text.trim() !== ""
-                                        clip: true
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: root.s(4)
+                                        Text { text: "Layout switcher shortcut"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(13); color: root.text }
+                                        Text { text: "Choose a key combination to switch between layouts."; font.family: "JetBrains Mono"; font.pixelSize: root.s(11); color: root.subtext0; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                    }
+
+                                    Item {
+                                        Layout.preferredWidth: settingsMainCol.controlColWidth
+                                        Layout.fillHeight: true
+                                        Layout.alignment: Qt.AlignVCenter
                                         
-                                        ListView {
-                                            anchors.fill: parent
-                                            model: langSearchModel
-                                            interactive: true
-                                            ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
-                                            delegate: Rectangle {
-                                                width: parent.width
-                                                height: root.s(30)
-                                                color: sMa.containsMouse ? root.surface2 : "transparent"
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.leftMargin: root.s(10)
-                                                    anchors.rightMargin: root.s(10)
-                                                    spacing: root.s(8)
-                                                    Text { text: model.code; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.text }
-                                                    Text { text: model.name; font.family: "JetBrains Mono"; font.pixelSize: root.s(11); color: root.subtext0; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Rectangle {
+                                            id: kbToggleSelector
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width
+                                            height: root.s(32)
+                                            radius: root.s(6)
+                                            color: root.surface0
+                                            border.color: layoutSwitcherBox.isDropdownOpen ? root.green : root.surface2
+                                            border.width: 1
+                                            
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: root.s(8)
+                                                Text { 
+                                                    text: root.getKbToggleLabel(root.setKbOptions)
+                                                    font.family: "JetBrains Mono"
+                                                    font.pixelSize: root.s(12)
+                                                    color: root.text
+                                                    Layout.fillWidth: true 
                                                 }
-                                                MouseArea {
-                                                    id: sMa
+                                                Text { 
+                                                    text: layoutSwitcherBox.isDropdownOpen ? "▴" : "▾"
+                                                    font.pixelSize: root.s(14)
+                                                    color: root.subtext0 
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: layoutSwitcherBox.isDropdownOpen = !layoutSwitcherBox.isDropdownOpen
+                                            }
+
+                                            Rectangle {
+                                                width: parent.width
+                                                height: root.kbToggleModelArr.length * root.s(30)
+                                                y: parent.height + root.s(4)
+                                                radius: root.s(6)
+                                                color: root.surface0
+                                                border.color: root.green
+                                                border.width: 1
+                                                visible: layoutSwitcherBox.isDropdownOpen
+                                                clip: true
+
+                                                ListView {
                                                     anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        let arr = root.setLanguage ? root.setLanguage.split(",").filter(x => x.trim() !== "") : [];
-                                                        if (!arr.includes(model.code)) {
-                                                            arr.push(model.code);
-                                                            root.setLanguage = arr.join(",");
+                                                    model: root.kbToggleModelArr
+                                                    interactive: false
+                                                    delegate: Rectangle {
+                                                        width: parent.width
+                                                        height: root.s(30)
+                                                        color: toggleMa.containsMouse ? root.surface2 : "transparent"
+                                                        RowLayout {
+                                                            anchors.fill: parent
+                                                            anchors.leftMargin: root.s(10)
+                                                            anchors.rightMargin: root.s(10)
+                                                            Text { 
+                                                                text: modelData.label
+                                                                font.family: "JetBrains Mono"
+                                                                font.pixelSize: root.s(11)
+                                                                color: root.setKbOptions === modelData.val ? root.green : root.text
+                                                                Layout.fillWidth: true 
+                                                            }
                                                         }
-                                                        langInput.text = "";
-                                                        langInput.focus = false;
+                                                        MouseArea {
+                                                            id: toggleMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                root.setKbOptions = modelData.val;
+                                                                layoutSwitcherBox.isDropdownOpen = false;
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1957,10 +2220,12 @@ Item {
                                     ColumnLayout {
                                         anchors.centerIn: parent
                                         spacing: root.s(15)
+                                        
                                         Item {
                                             Layout.alignment: Qt.AlignHCenter
-                                            width: root.s(130)
-                                            height: root.s(130)
+                                            Layout.preferredWidth: root.s(130)
+                                            Layout.preferredHeight: root.s(130)
+                                            
                                             Canvas {
                                                 id: gaugeCanvas
                                                 anchors.fill: parent
@@ -1991,6 +2256,7 @@ Item {
                                                     ctx.stroke();
                                                 }
                                             }
+                                            
                                             ColumnLayout { 
                                                 anchors.centerIn: parent
                                                 spacing: root.s(2)
@@ -1998,12 +2264,19 @@ Item {
                                                 Text { text: txtValue; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(18); color: root.text; Layout.alignment: Qt.AlignHCenter } 
                                             }
                                         }
-                                        Text { text: tTitle; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignHCenter }
+                                        
+                                        Text { 
+                                            text: tTitle; 
+                                            font.family: "JetBrains Mono"; 
+                                            font.weight: Font.Bold; 
+                                            font.pixelSize: root.s(12); 
+                                            color: root.subtext0; 
+                                            Layout.alignment: Qt.AlignHCenter 
+                                        }
                                     }
                                 }
                             }
                         }
-
                         // --- Consolidated Storage Block ---
                         Rectangle {
                             Layout.fillWidth: true
@@ -2128,98 +2401,98 @@ Item {
                                         Layout.alignment: Qt.AlignHCenter 
                                     }
                                 }
-                                MouseArea { 
-                                    anchors.fill: parent
-                                    hoverEnabled: root.netState === 0 || root.netState === 4
-                                    cursorShape: (root.netState === 0 || root.netState === 4) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                    onClicked: { 
-                                        if (root.netState === 0 || root.netState === 4) { 
-                                            root.netState = 1; 
-                                            root.displayPing = 0; 
-                                            root.finalPing = 0; 
-                                            root.displayDown = 0; 
-                                            root.finalDown = 0; 
-                                            root.displayUp = 0; 
-                                            root.finalUp = 0; 
-                                            pingProc.running = false; 
-                                            pingProc.running = true; 
-                                        } 
+                            }
+                            MouseArea { 
+                                anchors.fill: parent
+                                hoverEnabled: root.netState === 0 || root.netState === 4
+                                cursorShape: (root.netState === 0 || root.netState === 4) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: { 
+                                    if (root.netState === 0 || root.netState === 4) { 
+                                        root.netState = 1; 
+                                        root.displayPing = 0; 
+                                        root.finalPing = 0; 
+                                        root.displayDown = 0; 
+                                        root.finalDown = 0; 
+                                        root.displayUp = 0; 
+                                        root.finalUp = 0; 
+                                        pingProc.running = false; 
+                                        pingProc.running = true; 
                                     } 
+                                } 
+                            }
+                        }
+
+                        RowLayout {
+                            id: netResults
+                            x: root.netState === 0 ? parent.width : root.s(150)
+                            y: (parent.height - height) / 2
+                            opacity: root.netState === 0 ? 0 : 1
+                            spacing: root.s(40)
+                            Behavior on x { NumberAnimation { duration: 600; easing.type: Easing.OutBack; easing.overshoot: 1.05 } }
+                            Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.InOutQuad } }
+
+                            ColumnLayout {
+                                spacing: root.s(4)
+                                opacity: root.netState >= 1 ? 1.0 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 400 } }
+                                RowLayout { 
+                                    spacing: root.s(6)
+                                    Item { 
+                                        Layout.preferredWidth: root.s(16)
+                                        Layout.preferredHeight: root.s(16)
+                                        Text { anchors.centerIn: parent; text: "󰅸"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(16); color: root.peach } 
+                                    } 
+                                    Text { text: "PING"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0 } 
+                                }
+                                RowLayout { 
+                                    spacing: root.s(4)
+                                    Text { text: root.netState >= 2 ? root.displayPing.toFixed(0) : "..."; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(28); color: root.text } 
+                                    Text { text: "ms"; font.family: "JetBrains Mono"; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: root.s(5); visible: root.netState >= 2 } 
                                 }
                             }
-
-                            RowLayout {
-                                id: netResults
-                                x: root.netState === 0 ? parent.width : root.s(150)
-                                y: (parent.height - height) / 2
-                                opacity: root.netState === 0 ? 0 : 1
-                                spacing: root.s(40)
-                                Behavior on x { NumberAnimation { duration: 600; easing.type: Easing.OutBack; easing.overshoot: 1.05 } }
-                                Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.InOutQuad } }
-
-                                ColumnLayout {
-                                    spacing: root.s(4)
-                                    opacity: root.netState >= 1 ? 1.0 : 0.0
-                                    Behavior on opacity { NumberAnimation { duration: 400 } }
-                                    RowLayout { 
-                                        spacing: root.s(6)
-                                        Item { 
-                                            Layout.preferredWidth: root.s(16)
-                                            Layout.preferredHeight: root.s(16)
-                                            Text { anchors.centerIn: parent; text: "󰅸"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(16); color: root.peach } 
-                                        } 
-                                        Text { text: "PING"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0 } 
-                                    }
-                                    RowLayout { 
-                                        spacing: root.s(4)
-                                        Text { text: root.netState >= 2 ? root.displayPing.toFixed(0) : "..."; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(28); color: root.text } 
-                                        Text { text: "ms"; font.family: "JetBrains Mono"; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: root.s(5); visible: root.netState >= 2 } 
-                                    }
+                            
+                            ColumnLayout {
+                                spacing: root.s(4)
+                                opacity: root.netState >= 2 ? 1.0 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 400 } }
+                                RowLayout { 
+                                    spacing: root.s(6)
+                                    Item { 
+                                        Layout.preferredWidth: root.s(16)
+                                        Layout.preferredHeight: root.s(16)
+                                        Text { anchors.centerIn: parent; text: "󰇚"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(16); color: root.green } 
+                                    } 
+                                    Text { text: "DOWNLOAD"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0 } 
                                 }
-                                
-                                ColumnLayout {
+                                RowLayout { 
                                     spacing: root.s(4)
-                                    opacity: root.netState >= 2 ? 1.0 : 0.0
-                                    Behavior on opacity { NumberAnimation { duration: 400 } }
-                                    RowLayout { 
-                                        spacing: root.s(6)
-                                        Item { 
-                                            Layout.preferredWidth: root.s(16)
-                                            Layout.preferredHeight: root.s(16)
-                                            Text { anchors.centerIn: parent; text: "󰇚"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(16); color: root.green } 
-                                        } 
-                                        Text { text: "DOWNLOAD"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0 } 
-                                    }
-                                    RowLayout { 
-                                        spacing: root.s(4)
-                                        Text { text: root.netState >= 3 ? root.displayDown.toFixed(1) : "..."; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(28); color: root.green } 
-                                        Text { text: "Mbps"; font.family: "JetBrains Mono"; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: root.s(5); visible: root.netState >= 3 } 
-                                    }
+                                    Text { text: root.netState >= 3 ? root.displayDown.toFixed(1) : "..."; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(28); color: root.green } 
+                                    Text { text: "Mbps"; font.family: "JetBrains Mono"; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: root.s(5); visible: root.netState >= 3 } 
                                 }
-                                
-                                ColumnLayout {
+                            }
+                            
+                            ColumnLayout {
+                                spacing: root.s(4)
+                                opacity: root.netState >= 3 ? 1.0 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 400 } }
+                                RowLayout { 
+                                    spacing: root.s(6)
+                                    Item { 
+                                        Layout.preferredWidth: root.s(16)
+                                        Layout.preferredHeight: root.s(16)
+                                        Text { anchors.centerIn: parent; text: "󰕒"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(16); color: root.mauve } 
+                                    } 
+                                    Text { text: "UPLOAD"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0 } 
+                                }
+                                RowLayout { 
                                     spacing: root.s(4)
-                                    opacity: root.netState >= 3 ? 1.0 : 0.0
-                                    Behavior on opacity { NumberAnimation { duration: 400 } }
-                                    RowLayout { 
-                                        spacing: root.s(6)
-                                        Item { 
-                                            Layout.preferredWidth: root.s(16)
-                                            Layout.preferredHeight: root.s(16)
-                                            Text { anchors.centerIn: parent; text: "󰕒"; font.family: "Iosevka Nerd Font"; font.pixelSize: root.s(16); color: root.mauve } 
-                                        } 
-                                        Text { text: "UPLOAD"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: root.s(12); color: root.subtext0 } 
-                                    }
-                                    RowLayout { 
-                                        spacing: root.s(4)
-                                        Text { text: root.netState >= 4 ? root.displayUp.toFixed(1) : "..."; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(28); color: root.mauve } 
-                                        Text { text: "Mbps"; font.family: "JetBrains Mono"; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: root.s(5); visible: root.netState >= 4 } 
-                                    }
+                                    Text { text: root.netState >= 4 ? root.displayUp.toFixed(1) : "..."; font.family: "JetBrains Mono"; font.weight: Font.Black; font.pixelSize: root.s(28); color: root.mauve } 
+                                    Text { text: "Mbps"; font.family: "JetBrains Mono"; font.pixelSize: root.s(12); color: root.subtext0; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: root.s(5); visible: root.netState >= 4 } 
                                 }
                             }
                         }
-                        Item { Layout.fillHeight: true }
                     }
+                    Item { Layout.fillHeight: true }
                 }
             }
 
@@ -2807,14 +3080,16 @@ Item {
                 property string selectedUnit: "metric"
                 property bool apiKeyVisible: false
 
-                function saveWeatherConfig() {
+        function saveWeatherConfig() {
+            var cache_weather = Quickshell.env("HOME") + "/.cache/quickshell/weather";
                     var file = Quickshell.env("HOME") + "/.config/hypr/scripts/quickshell/calendar/.env";
                     var cmds = [
                         "mkdir -p $(dirname " + file + ")",
                         "echo '# OpenWeather API Configuration (OVERWRITE, not add)' > " + file,
                         "echo 'OPENWEATHER_KEY=" + apiKeyInput.text + "' >> " + file,
                         "echo 'OPENWEATHER_CITY_ID=" + cityIdInput.text + "' >> " + file,
-                        "echo 'OPENWEATHER_UNIT=" + weatherTab.selectedUnit + "' >> " + file,
+            "echo 'OPENWEATHER_UNIT=" + weatherTab.selectedUnit + "' >> " + file,
+            "rm -r " + cache_weather,
                         "notify-send 'Weather' 'API configuration saved successfully!'"
                     ];
                     var finalCmd = cmds.join(" && ");
@@ -2974,6 +3249,28 @@ Item {
             Item {
                 anchors.fill: parent
                 visible: root.currentTab === 7
+                opacity: visible ? 1.0 : 0.0
+                property real slideY: visible ? 0 : root.s(10)
+                
+                Behavior on slideY { NumberAnimation { duration: 250; easing.type: Easing.OutQuart } }
+                transform: Translate { y: slideY }
+                Behavior on opacity { NumberAnimation { duration: 250 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "coming soon"
+                    font.family: "JetBrains Mono"
+                    font.pixelSize: root.s(24)
+                    color: root.subtext0
+                }
+            }
+
+            // ------------------------------------------
+            // TAB 8: ABOUT
+            // ------------------------------------------
+            Item {
+                anchors.fill: parent
+                visible: root.currentTab === 8
                 opacity: visible ? 1.0 : 0.0
                 property real slideY: visible ? 0 : root.s(10)
                 

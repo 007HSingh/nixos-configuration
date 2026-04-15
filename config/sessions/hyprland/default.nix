@@ -17,6 +17,7 @@
     rofi
     pavucontrol
     fortune
+    wl-screenrec
     alsa-utils
     swww
     networkmanager_dmenu

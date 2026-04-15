@@ -54,6 +54,23 @@ Variants {
 
             // --- State Variables ---
             property bool showHelpIcon: true
+            property bool isRecording: false // Track screen recording
+            
+            // Background poller to check if wl-screenrec is active
+            Process {
+                id: recPoller
+                command: ["bash", "-c", "pgrep -x wl-screenrec >/dev/null && echo '1' || echo '0'"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        barWindow.isRecording = (this.text.trim() === "1");
+                    }
+                }
+            }
+
+            Timer {
+                interval: 500; running: true; repeat: true
+                onTriggered: recPoller.running = true
+            }
             
             Process {
                 id: settingsReader
@@ -128,11 +145,8 @@ Variants {
             Timer { interval: 1000; running: true; onTriggered: barWindow.startupCascadeFinished = true }
             
             // Data gating to prevent startup layout jumping
-            property bool sysPollerLoaded: false
             property bool fastPollerLoaded: false
             
-            // FIXED: Only wait for the instant data to load the UI. 
-            // The slow network scripts will populate smoothly when they finish.
             property bool isDataReady: fastPollerLoaded
             // Failsafe: Force the layout to show after 600ms even if fast poller hangs
             Timer { interval: 600; running: true; onTriggered: barWindow.isDataReady = true }
@@ -172,15 +186,16 @@ Variants {
             property bool isMediaActive: barWindow.musicData.status !== "Stopped" && barWindow.musicData.title !== ""
             property bool isWifiOn: barWindow.wifiStatus.toLowerCase() === "enabled" || barWindow.wifiStatus.toLowerCase() === "on"
             property bool isBtOn: barWindow.btStatus.toLowerCase() === "enabled" || barWindow.btStatus.toLowerCase() === "on"
+            property bool showEthernet: barWindow.isDesktop && !barWindow.isWifiOn
             
             property bool isSoundActive: !barWindow.isMuted && parseInt(barWindow.volPercent) > 0
             property int batCap: parseInt(barWindow.batPercent) || 0
             property bool isCharging: barWindow.batStatus === "Charging" || barWindow.batStatus === "Full"
+            
             property color batDynamicColor: {
                 if (isCharging) return mocha.green;
-                if (batCap >= 70) return mocha.blue;
-                if (batCap >= 30) return mocha.yellow;
-                return mocha.red;
+                if (batCap <= 20) return mocha.red;
+                return mocha.text; // Ensures normal color instead of dimmed look when discharging
             }
 
             // ==========================================
@@ -188,14 +203,12 @@ Variants {
             // ==========================================
 
             // Workspaces --------------------------------
-            // 1. The continuous background daemon
             Process {
                 id: wsDaemon
                 command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/workspaces.sh"]
                 running: true
             }
 
-            // 2. The lightweight reader
             Process {
                 id: wsReader
                 command: ["cat", "/tmp/qs_workspaces.json"]
@@ -226,7 +239,6 @@ Variants {
                 }
             }
 
-            // 3. ZERO-CPU Event Watcher (Replaces the brutal 50ms timer)
             Process {
                 id: wsWatcher
                 running: true
@@ -238,7 +250,6 @@ Variants {
             }
 
             // Music -------------------------------------
-            // 1. Direct executor for heavy DBus fetching and downloading art (only runs on actual song changes)
             Process {
                 id: musicForceRefresh
                 running: true
@@ -253,8 +264,6 @@ Variants {
                 }
             }
 
-            // 2. Lightweight JS Timer ONLY for clock progress (Zero CPU/Zero DBus cost)
-            // It parses the current time string and increments it locally while playing.
             Timer {
                 interval: 1000
                 running: true
@@ -269,7 +278,6 @@ Variants {
                     let posParts = parts[0].split(":").map(Number);
                     let lenParts = parts[1].split(":").map(Number);
 
-                    // Handle mm:ss or hh:mm:ss formats automatically
                     let posSecs = (posParts.length === 3) 
                         ? (posParts[0] * 3600 + posParts[1] * 60 + posParts[2]) 
                         : (posParts[0] * 60 + posParts[1]);
@@ -295,10 +303,8 @@ Variants {
                         newPosStr = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
                     }
 
-                    // Reassign to trigger UI bindings
                     let newData = Object.assign({}, barWindow.musicData);
                     newData.timeStr = newPosStr + " / " + parts[1];
-                    // Also update absolute strings to sync smoothly
                     newData.positionStr = newPosStr;
                     if (lenSecs > 0) newData.percent = (posSecs / lenSecs) * 100;
                     
@@ -306,71 +312,123 @@ Variants {
                 }
             }
 
-            // 3. INSTANT Zero-CPU Event Watcher for MPRIS (Play/Pause/Skip/Seek)
             Process {
                 id: mprisWatcher
                 running: true
-                // Hooks directly into raw DBus signals for Metadata changes AND track Scrubbing/Seeking.
-                // grep -m 1 'member=' catches the signal instantly and self-destructs to trigger the refresh.
                 command: ["bash", "-c", "dbus-monitor --session \"type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',arg0='org.mpris.MediaPlayer2.Player'\" \"type='signal',interface='org.mpris.MediaPlayer2.Player',member='Seeked'\" 2>/dev/null | grep -m 1 'member=' > /dev/null || sleep 2"]
                 onExited: {
                     musicForceRefresh.running = true;
                     running = true;
                 }
             }
-            // Unified System Info ------------------------
+
+            // ==========================================
+            // MODULAR SYSTEM WATCHERS
+            // ==========================================
+
+            // --- KEYBOARD ---
             Process {
-                id: sysPoller
-                running: true
-                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/sys_info.sh"]
+                id: kbPoller; running: true
+                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/kb_fetch.sh"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let txt = this.text.trim();
+                        if (txt !== "" && barWindow.kbLayout !== txt) barWindow.kbLayout = txt;
+                        kbWaiter.running = true;
+                        barWindow.fastPollerLoaded = true; // Gating flag
+                    }
+                }
+            }
+            Process { id: kbWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/kb_wait.sh"]; onExited: kbPoller.running = true }
+
+            // --- AUDIO ---
+            Process {
+                id: audioPoller; running: true
+                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/audio_fetch.sh"]
                 stdout: StdioCollector {
                     onStreamFinished: {
                         let txt = this.text.trim();
                         if (txt !== "") {
                             try {
                                 let data = JSON.parse(txt);
-                                
-                                // Targeted Updates
-                                if (barWindow.wifiStatus !== data.wifi.status) barWindow.wifiStatus = data.wifi.status;
-                                if (barWindow.wifiIcon !== data.wifi.icon) barWindow.wifiIcon = data.wifi.icon;
-                                if (barWindow.wifiSsid !== data.wifi.ssid) barWindow.wifiSsid = data.wifi.ssid;
-
-                                if (barWindow.btStatus !== data.bt.status) barWindow.btStatus = data.bt.status;
-                                if (barWindow.btIcon !== data.bt.icon) barWindow.btIcon = data.bt.icon;
-                                if (barWindow.btDevice !== data.bt.connected) barWindow.btDevice = data.bt.connected;
-
-                                let newVol = data.audio.volume.toString() + "%";
+                                let newVol = data.volume.toString() + "%";
                                 if (barWindow.volPercent !== newVol) barWindow.volPercent = newVol;
-                                if (barWindow.volIcon !== data.audio.icon) barWindow.volIcon = data.audio.icon;
-                                
-                                let newMuted = (data.audio.is_muted === "true");
+                                if (barWindow.volIcon !== data.icon) barWindow.volIcon = data.icon;
+                                let newMuted = (data.is_muted === "true");
                                 if (barWindow.isMuted !== newMuted) barWindow.isMuted = newMuted;
-
-                                let newBat = data.battery.percent.toString() + "%";
-                                if (barWindow.batPercent !== newBat) barWindow.batPercent = newBat;
-                                if (barWindow.batIcon !== data.battery.icon) barWindow.batIcon = data.battery.icon;
-                                if (barWindow.batStatus !== data.battery.status) barWindow.batStatus = data.battery.status;
-
-                                if (barWindow.kbLayout !== data.keyboard.layout) barWindow.kbLayout = data.keyboard.layout;
-
-                                barWindow.sysPollerLoaded = true;
-                                barWindow.fastPollerLoaded = true;
                             } catch(e) {}
                         }
-                        
-                        // THE FIX: Removed `musicForceRefresh.running = true;` from here
-                        // This completely severs the DBus spam loop during music playback.
-                        sysWaiter.running = true;
+                        audioWaiter.running = true;
                     }
                 }
             }
-            
+            Process { id: audioWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/audio_wait.sh"]; onExited: audioPoller.running = true }
+
+            // --- NETWORK ---
             Process {
-                id: sysWaiter
-                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/sys_waiter.sh"]
-                // Strictly use onExited. Quickshell will no longer hook into stdout, preventing pipe deadlocks.
-                onExited: sysPoller.running = true 
-            }            // Weather remains a slow poll since it fetches from web
+                id: networkPoller; running: true
+                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/network_fetch.sh"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let txt = this.text.trim();
+                        if (txt !== "") {
+                            try {
+                                let data = JSON.parse(txt);
+                                if (barWindow.wifiStatus !== data.status) barWindow.wifiStatus = data.status;
+                                if (barWindow.wifiIcon !== data.icon) barWindow.wifiIcon = data.icon;
+                                if (barWindow.wifiSsid !== data.ssid) barWindow.wifiSsid = data.ssid;
+                            } catch(e) {}
+                        }
+                        networkWaiter.running = true;
+                    }
+                }
+            }
+            Process { id: networkWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/network_wait.sh"]; onExited: networkPoller.running = true }
+
+            // --- BLUETOOTH ---
+            Process {
+                id: btPoller; running: true
+                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/bt_fetch.sh"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let txt = this.text.trim();
+                        if (txt !== "") {
+                            try {
+                                let data = JSON.parse(txt);
+                                if (barWindow.btStatus !== data.status) barWindow.btStatus = data.status;
+                                if (barWindow.btIcon !== data.icon) barWindow.btIcon = data.icon;
+                                if (barWindow.btDevice !== data.connected) barWindow.btDevice = data.connected;
+                            } catch(e) {}
+                        }
+                        btWaiter.running = true;
+                    }
+                }
+            }
+            Process { id: btWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/bt_wait.sh"]; onExited: btPoller.running = true }
+
+            // --- BATTERY ---
+            Process {
+                id: batteryPoller; running: true
+                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/battery_fetch.sh"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        let txt = this.text.trim();
+                        if (txt !== "") {
+                            try {
+                                let data = JSON.parse(txt);
+                                let newBat = data.percent.toString() + "%";
+                                if (barWindow.batPercent !== newBat) barWindow.batPercent = newBat;
+                                if (barWindow.batIcon !== data.icon) barWindow.batIcon = data.icon;
+                                if (barWindow.batStatus !== data.status) barWindow.batStatus = data.status;
+                            } catch(e) {}
+                        }
+                        batteryWaiter.running = true;
+                    }
+                }
+            }
+            Process { id: batteryWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/battery_wait.sh"]; onExited: batteryPoller.running = true }
+
+
             Process {
                 id: weatherPoller
                 command: ["bash", "-c", `
@@ -459,7 +517,6 @@ Variants {
                         onClicked: Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh toggle calendar"])
                     }
 
-                    // Using RowLayout to perfectly align children to vertical center naturally
                     RowLayout {
                         id: centerLayout
                         anchors.centerIn: parent
@@ -582,35 +639,6 @@ Variants {
                         }
                     }
 
-                    // Notifications
-                    Rectangle {
-                        property bool isHovered: notifMouse.containsMouse
-                        color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.95) : Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
-                        radius: barWindow.s(14); border.width: 1; border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, isHovered ? 0.15 : 0.05)
-                        Layout.preferredHeight: parent.moduleHeight; Layout.preferredWidth: barWindow.barHeight
-                        
-                        scale: isHovered ? 1.05 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        
-                        Text {
-                            anchors.centerIn: parent
-                            text: ""
-                            font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.s(18)
-                            color: parent.isHovered ? mocha.yellow : mocha.text
-                            Behavior on color { ColorAnimation { duration: 200 } }
-                        }
-                        MouseArea {
-                            id: notifMouse
-                            anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            hoverEnabled: true
-                            onClicked: (mouse) => {
-                                if (mouse.button === Qt.LeftButton) Quickshell.execDetached(["swaync-client", "-t", "-sw"]);
-                                if (mouse.button === Qt.RightButton) Quickshell.execDetached(["swaync-client", "-d"]);
-                            }
-                        }
-                    }
-
                     // Workspaces 
                     Rectangle {
                         color: Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
@@ -625,7 +653,6 @@ Variants {
                         
                         Behavior on opacity { NumberAnimation { duration: 300 } }
 
-                        // Using standard Row completely removes internal width sizing bugs
                         Row {
                             id: wsLayout
                             anchors.centerIn: parent
@@ -637,7 +664,6 @@ Variants {
                                     id: wsPill
                                     property bool isHovered: wsPillMouse.containsMouse
                                     
-                                    // Mapped dynamically from the ListModel
                                     property string stateLabel: model.wsState
                                     property string wsName: model.wsId
                                     
@@ -746,7 +772,6 @@ Variants {
                             Row {
                                 id: innerMediaLayout
                                 anchors.verticalCenter: parent.verticalCenter
-                                // Dynamically reduce spacing between song info and controls on smaller screens
                                 spacing: barWindow.width < 1920 ? barWindow.s(8) : barWindow.s(16)
                                 
                                 MouseArea {
@@ -783,7 +808,6 @@ Variants {
                                         Column {
                                             spacing: -2
                                             anchors.verticalCenter: parent.verticalCenter
-                                            // Make column explicitly sized to enforce elide truncating on text
                                             property real maxColWidth: barWindow.width < 1920 ? barWindow.s(120) : barWindow.s(180)
                                             width: maxColWidth 
                                             
@@ -865,7 +889,7 @@ Variants {
                     anchors.leftMargin: barWindow.s(12)
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: barWindow.s(4)
-
+                    
                     // Staggered Right Transition
                     property bool showLayout: false
                     opacity: showLayout ? 1 : 0
@@ -887,7 +911,7 @@ Variants {
 
                     // Dedicated System Tray Pill
                     Rectangle {
-                        Layout.preferredHeight: barWindow.barHeight // THE FIX: Replaced basic "height"
+                        Layout.preferredHeight: barWindow.barHeight
                         radius: barWindow.s(14)
                         border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, 0.08)
                         border.width: 1
@@ -975,7 +999,7 @@ Variants {
 
                     // System Elements Pill
                     Rectangle {
-                        Layout.preferredHeight: barWindow.barHeight // THE FIX: Replaced basic "height"
+                        Layout.preferredHeight: barWindow.barHeight
                         radius: barWindow.s(14)
                         border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, 0.08)
                         border.width: 1
@@ -1033,7 +1057,7 @@ Variants {
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: barWindow.s(10)
-                                    opacity: barWindow.isDesktop ? (barWindow.ethStatus === "Connected" ? 1.0 : 0.0) : (barWindow.isWifiOn ? 1.0 : 0.0)
+                                    opacity: barWindow.showEthernet ? (barWindow.ethStatus === "Connected" ? 1.0 : 0.0) : (barWindow.isWifiOn ? 1.0 : 0.0)
                                     Behavior on opacity { NumberAnimation { duration: 300 } }
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
@@ -1060,24 +1084,24 @@ Variants {
                                     id: wifiLayoutRow; anchors.centerIn: parent; spacing: barWindow.s(8)
                                     Text { 
                                         anchors.verticalCenter: parent.verticalCenter; 
-                                        text: barWindow.isDesktop ? "󰈀" : barWindow.wifiIcon; 
-                                        font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.s(16); 
-                                        color: barWindow.isDesktop ? (barWindow.ethStatus === "Connected" ? mocha.base : mocha.subtext0) : (barWindow.isWifiOn ? mocha.base : mocha.subtext0) 
+                                        text: barWindow.showEthernet ? "󰈀" : barWindow.wifiIcon;
+                                        font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.s(16);
+                                        color: barWindow.showEthernet ? (barWindow.ethStatus === "Connected" ? mocha.base : mocha.subtext0) : (barWindow.isWifiOn ? mocha.base : mocha.subtext0)
                                     }
                                     Text { 
                                         id: wifiText
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: barWindow.isDesktop ? barWindow.ethStatus : (barWindow.sysPollerLoaded ? (barWindow.isWifiOn ? (barWindow.wifiSsid !== "" ? barWindow.wifiSsid : "On") : "Off") : "")
+                                        text: barWindow.showEthernet ? barWindow.ethStatus : ((barWindow.isWifiOn ? (barWindow.wifiSsid !== "" ? barWindow.wifiSsid : "On") : "Off"))
                                         visible: text !== ""
-                                        font.family: "JetBrains Mono"; font.pixelSize: barWindow.s(13); font.weight: Font.Black; 
-                                        color: barWindow.isDesktop ? (barWindow.ethStatus === "Connected" ? mocha.base : mocha.text) : (barWindow.isWifiOn ? mocha.base : mocha.text); 
+                                        font.family: "JetBrains Mono"; font.pixelSize: barWindow.s(13); font.weight: Font.Black;
+                                        color: barWindow.showEthernet ? (barWindow.ethStatus === "Connected" ? mocha.base : mocha.text) : (barWindow.isWifiOn ? mocha.base : mocha.text);
                                         width: Math.min(implicitWidth, barWindow.s(100)); elide: Text.ElideRight 
                                     }
                                 }
                                 MouseArea { id: wifiMouse; hoverEnabled: true; anchors.fill: parent; onClicked: Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh toggle network wifi"]) }
                             }
 
-                            // Bluetooth (Collapsed on Desktop)
+                            // Bluetooth
                             Rectangle {
                                 id: btPill
                                 property bool isHovered: btMouse.containsMouse
@@ -1118,7 +1142,7 @@ Variants {
                                     Text { 
                                         id: btText
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: barWindow.sysPollerLoaded ? barWindow.btDevice : ""
+                                        text: barWindow.btDevice
                                         visible: text !== ""; 
                                         font.family: "JetBrains Mono"; font.pixelSize: barWindow.s(13); font.weight: Font.Black; 
                                         color: barWindow.isBtOn ? mocha.base : mocha.text; 
@@ -1181,16 +1205,14 @@ Variants {
                             // Battery (or Power button for Desktop)
                             Rectangle {
                                 property bool isHovered: batMouse.containsMouse
-                                color: barWindow.isDesktop 
-                                        ? (isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4)) 
-                                        : (isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4)); 
+                                color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.6) : Qt.rgba(mocha.surface0.r, mocha.surface0.g, mocha.surface0.b, 0.4); 
                                 radius: barWindow.s(10); height: sysLayout.pillHeight;
                                 clip: true
 
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: barWindow.s(10)
-                                    opacity: barWindow.isDesktop ? 1.0 : ((barWindow.isCharging || barWindow.batCap <= 20) ? 1.0 : 0.0)
+                                    opacity: 1.0 
                                     Behavior on opacity { NumberAnimation { duration: 300 } }
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
@@ -1219,14 +1241,14 @@ Variants {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: barWindow.isDesktop ? "" : barWindow.batIcon; 
                                         font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.isDesktop ? barWindow.s(18) : barWindow.s(16); 
-                                        color: barWindow.isDesktop ? mocha.base : ((barWindow.isCharging || barWindow.batCap <= 20) ? mocha.base : barWindow.batDynamicColor)
+                                        color: mocha.base // Always mocha.base since gradient is 1.0 opacity
                                         Behavior on color { ColorAnimation { duration: 300 } }
                                     }
                                     Text { 
                                         anchors.verticalCenter: parent.verticalCenter
                                         visible: !barWindow.isDesktop
                                         text: barWindow.batPercent; font.family: "JetBrains Mono"; font.pixelSize: barWindow.s(13); font.weight: Font.Black; 
-                                        color: (barWindow.isCharging || barWindow.batCap <= 20) ? mocha.base : barWindow.batDynamicColor
+                                        color: mocha.base // Always mocha.base since gradient is 1.0 opacity
                                         Behavior on color { ColorAnimation { duration: 300 } }
                                     }
                                 }
@@ -1234,6 +1256,66 @@ Variants {
                             }
                         }
                     }
+                    
+                    // --- NEW: Screen Recording Indicator & Stop Button ---
+                    Rectangle {
+                        id: recButton
+                        property bool isHovered: recMouse.containsMouse
+                        
+                        // PERFECTLY MATCH THE OTHER ICON BUTTON BACKGROUNDS (Help/Search)
+                        color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.95) : Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
+                        radius: barWindow.s(14)
+                        border.width: 1
+                        border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, isHovered ? 0.15 : 0.05)
+
+                        property real targetWidth: barWindow.isRecording ? barWindow.barHeight : 0
+                        Layout.preferredWidth: targetWidth
+                        Layout.preferredHeight: barWindow.barHeight // MATCHES HEIGHT OF EVERYTHING ELSE PERFECTLY
+
+                        visible: targetWidth > 0 || opacity > 0
+                        opacity: barWindow.isRecording ? 1.0 : 0.0
+                        clip: true
+
+                        Behavior on targetWidth { NumberAnimation { duration: 400; easing.type: Easing.OutQuint } }
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+                        
+                        scale: isHovered ? 1.05 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
+                        Behavior on color { ColorAnimation { duration: 200 } }
+
+                        Text {
+                            id: recIcon
+                            anchors.centerIn: parent
+                            text: "" // Stop square icon
+                            font.family: "Iosevka Nerd Font"
+                            font.pixelSize: barWindow.s(20)
+                            color: mocha.red
+                            
+                            // ISOLATED PULSING: Only the icon scales and fades so the layout never jumps/looks weird
+                            SequentialAnimation on opacity {
+                                running: barWindow.isRecording && !recButton.isHovered
+                                loops: Animation.Infinite
+                                NumberAnimation { to: 0.3; duration: 600; easing.type: Easing.InOutSine }
+                                NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+                            }
+                            SequentialAnimation on scale {
+                                running: barWindow.isRecording && !recButton.isHovered
+                                loops: Animation.Infinite
+                                NumberAnimation { to: 1.15; duration: 600; easing.type: Easing.InOutSine }
+                                NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+                            }
+                        }
+                        
+                        MouseArea {
+                            id: recMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                barWindow.isRecording = false; // Collapse instantly for crisp UI feedback
+                                Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/screenshot.sh"]); 
+                            }
+                        }
+                    }                    
                 }
             }
         }
