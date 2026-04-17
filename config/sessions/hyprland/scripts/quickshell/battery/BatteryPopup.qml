@@ -199,6 +199,7 @@ Item {
     // --- ENHANCED STARTUP ANIMATION STATES ---
     property real introMain: 0
     property real introTop: 0
+    property real introNotifs: 0
     property real introCore: 0
     property real introSliders: 0
     property real introActions: 0
@@ -214,6 +215,12 @@ Item {
         SequentialAnimation {
             PauseAnimation { duration: 100 }
             NumberAnimation { target: window; property: "introTop"; from: 0; to: 1.0; duration: 800; easing.type: Easing.OutBack; easing.overshoot: 1.0 }
+        }
+
+        // Notification List cascades in smoothly
+        SequentialAnimation {
+            PauseAnimation { duration: 150 }
+            NumberAnimation { target: window; property: "introNotifs"; from: 0; to: 1.0; duration: 850; easing.type: Easing.OutQuart }
         }
 
         // Central core pops out and breathes
@@ -245,6 +252,7 @@ Item {
         id: exitAnim
         NumberAnimation { target: window; property: "introMain"; to: 0; duration: 400; easing.type: Easing.InQuart }
         NumberAnimation { target: window; property: "introTop"; to: 0; duration: 300; easing.type: Easing.InQuart }
+        NumberAnimation { target: window; property: "introNotifs"; to: 0; duration: 300; easing.type: Easing.InQuart }
         NumberAnimation { target: window; property: "introCore"; to: 0; duration: 350; easing.type: Easing.InQuart }
         NumberAnimation { target: window; property: "introSliders"; to: 0; duration: 250; easing.type: Easing.InQuart }
         NumberAnimation { target: window; property: "introActions"; to: 0; duration: 200; easing.type: Easing.InQuart }
@@ -300,30 +308,14 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                spacing: 0
+                spacing: window.s(15) // Seamless separation instead of a line
 
                 // ==========================================
                 // LEFT SIDE: NOTIFICATION CENTER
                 // ==========================================
                 Item {
-                    Layout.preferredWidth: window.s(320) // Trimmed width
+                    Layout.preferredWidth: window.s(320)
                     Layout.fillHeight: true
-
-                    // Visual Separator Panel
-                    Rectangle {
-                        anchors.fill: parent
-                        color: Qt.alpha(window.mantle, 0.4)
-                        radius: window.s(20)
-                        
-                        // Square off the right edge so it flushes perfectly with the divider
-                        Rectangle {
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            width: window.s(20)
-                            color: parent.color
-                        }
-                    }
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -336,7 +328,6 @@ Item {
                             Layout.preferredHeight: window.s(38)
                             spacing: window.s(12)
                             
-                            // Transform tied to the same intro sequence as the Top Bar
                             transform: Translate { y: window.s(-20) * (1.0 - introTop) }
                             opacity: introTop
 
@@ -355,8 +346,8 @@ Item {
                                 Layout.preferredWidth: dndMa.containsMouse ? window.s(38) + dndText.implicitWidth + window.s(8) : window.s(38)
                                 Layout.preferredHeight: window.s(38)
                                 radius: window.s(12)
-                                color: window.dndEnabled ? Qt.alpha(window.red, 0.15) : (dndMa.containsMouse ? "#1affffff" : "transparent")
-                                border.color: window.dndEnabled ? window.red : (dndMa.containsMouse ? "#33ffffff" : "transparent")
+                                color: window.dndEnabled ? Qt.alpha(window.red, 0.15) : (dndMa.containsMouse ? window.surface1 : "transparent")
+                                border.color: window.dndEnabled ? window.red : (dndMa.containsMouse ? window.surface2 : "transparent")
                                 border.width: 1
                                 clip: true
 
@@ -366,7 +357,7 @@ Item {
 
                                 Row {
                                     anchors.right: parent.right
-                                    anchors.rightMargin: window.s(10) // Tightly centers the 18px icon in a 38px circle
+                                    anchors.rightMargin: window.s(10)
                                     anchors.verticalCenter: parent.verticalCenter
                                     spacing: window.s(8)
 
@@ -397,7 +388,6 @@ Item {
                                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         window.dndEnabled = !window.dndEnabled;
-                                        // Cache the state permanently
                                         Quickshell.execDetached(["sh", "-c", "mkdir -p ~/.cache && echo '" + (window.dndEnabled ? "1" : "0") + "' > ~/.cache/qs_dnd"]);
                                     }
                                 }
@@ -416,7 +406,7 @@ Item {
                             color: window.overlay0
                             text: "You're all caught up."
                             visible: !notifModel || notifModel.count === 0
-                            opacity: introCore
+                            opacity: introNotifs
                         }
 
                         // --- Notification List ---
@@ -428,8 +418,8 @@ Item {
                             spacing: window.s(8)
                             clip: true
                             
-                            opacity: introCore
-                            transform: Translate { y: window.s(25) * (1 - introCore) }
+                            opacity: introNotifs
+                            transform: Translate { y: window.s(20) * (1 - introNotifs) }
 
                             ScrollBar.vertical: ScrollBar {
                                 active: notifList.moving || notifList.movingVertically
@@ -442,17 +432,18 @@ Item {
                             add: Transition {
                                 ParallelAnimation {
                                     NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 400; easing.type: Easing.OutQuint }
-                                    NumberAnimation { property: "x"; from: window.s(-50); to: 0; duration: 500; easing.type: Easing.OutQuint }
+                                    NumberAnimation { property: "x"; from: window.s(-40); to: 0; duration: 500; easing.type: Easing.OutExpo }
+                                    NumberAnimation { property: "scale"; from: 0.95; to: 1.0; duration: 500; easing.type: Easing.OutBack }
                                 }
                             }
                             remove: Transition {
                                 ParallelAnimation {
-                                    NumberAnimation { property: "opacity"; to: 0.0; duration: 350; easing.type: Easing.OutQuint }
-                                    NumberAnimation { property: "x"; to: window.s(50); duration: 400; easing.type: Easing.OutQuint }
+                                    NumberAnimation { property: "opacity"; to: 0.0; duration: 300; easing.type: Easing.OutQuint }
+                                    NumberAnimation { property: "scale"; to: 0.9; duration: 300; easing.type: Easing.OutQuint }
                                 }
                             }
                             displaced: Transition {
-                                NumberAnimation { properties: "y"; duration: 450; easing.type: Easing.OutQuint }
+                                NumberAnimation { properties: "y"; duration: 400; easing.type: Easing.OutExpo }
                             }
 
                             // --- Grouping Configuration ---
@@ -466,13 +457,13 @@ Item {
                                     anchors.fill: parent
                                     anchors.topMargin: window.s(10)
                                     anchors.bottomMargin: window.s(4)
-                                    color: headerMa.containsMouse ? Qt.alpha(window.surface0, 0.8) : Qt.alpha(window.surface0, 0.3)
+                                    color: headerMa.containsMouse ? window.surface1 : "transparent"
                                     radius: window.s(8)
                                     Behavior on color { ColorAnimation { duration: 150 } }
 
                                     RowLayout {
                                         anchors.fill: parent
-                                        anchors.leftMargin: window.s(12)
+                                        anchors.leftMargin: window.s(6)
                                         anchors.rightMargin: window.s(6)
                                         spacing: window.s(8)
 
@@ -492,7 +483,7 @@ Item {
                                                 Text {
                                                     font.family: "Iosevka Nerd Font"
                                                     font.pixelSize: window.s(14)
-                                                    color: window.overlay1
+                                                    color: window.mauve
                                                     text: window.isCollapsed(section) ? "󰅂" : "󰅀"
                                                     Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
                                                 }
@@ -514,7 +505,7 @@ Item {
                                             Layout.preferredWidth: window.s(26)
                                             Layout.preferredHeight: window.s(26)
                                             radius: window.s(13)
-                                            color: groupClearMa.containsMouse ? window.surface1 : "transparent"
+                                            color: groupClearMa.containsMouse ? window.surface2 : "transparent"
                                             Behavior on color { ColorAnimation { duration: 150 } }
 
                                             Text {
@@ -546,7 +537,7 @@ Item {
                                 opacity: isHidden ? 0 : 1
                                 clip: true
                                 
-                                Behavior on height { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                                Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
                                 Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
 
                                 Rectangle {
@@ -554,10 +545,18 @@ Item {
                                     width: parent.width
                                     height: cardContent.height + window.s(24)
                                     radius: window.s(14)
-                                    color: Qt.alpha(window.surface0, 0.6)
-                                    border.color: Qt.alpha(window.surface1, 0.4)
+                                    color: cardHover.containsMouse ? window.surface1 : window.surface0
+                                    border.color: cardHover.containsMouse ? window.surface2 : "transparent"
                                     border.width: 1
                                     clip: true
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+
+                                    MouseArea {
+                                        id: cardHover
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                    }
 
                                     // Left side accent stripe
                                     Rectangle {
@@ -573,7 +572,7 @@ Item {
                                         anchors.right: parent.right
                                         anchors.top: parent.top
                                         anchors.margins: window.s(14)
-                                        anchors.leftMargin: window.s(16) // make room for the accent stripe
+                                        anchors.leftMargin: window.s(18) // make room for the accent stripe
                                         spacing: window.s(6)
 
                                         RowLayout {
@@ -611,7 +610,6 @@ Item {
                                                     id: itemClearMa
                                                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                                     onClicked: {
-                                                        // Map visual index to model and safely remove
                                                         if(window.notifModel) window.notifModel.remove(index);
                                                     }
                                                 }
@@ -634,17 +632,6 @@ Item {
                             }
                         }
                     }
-                }
-
-                // ==========================================
-                // CENTER DIVIDER
-                // ==========================================
-                Rectangle {
-                    Layout.preferredWidth: 1
-                    Layout.fillHeight: true
-                    Layout.topMargin: window.s(30)
-                    Layout.bottomMargin: window.s(30)
-                    color: Qt.alpha(window.surface0, 0.5)
                 }
 
                 // ==========================================
@@ -688,7 +675,7 @@ Item {
                         // Hours Box
                         Rectangle {
                             width: window.s(44); height: window.s(48); radius: window.s(10)
-                            color: "#0dffffff"; border.color: "#1affffff"; border.width: 1
+                            color: window.surface0; border.color: window.surface1; border.width: 1
                             
                             Rectangle { anchors.fill: parent; radius: window.s(10); color: window.ambientPrimary; opacity: 0.05; Behavior on color { ColorAnimation { duration: 1000 } } }
                             Column {
@@ -727,7 +714,7 @@ Item {
                         // Mins Box
                         Rectangle {
                             width: window.s(44); height: window.s(48); radius: window.s(10)
-                            color: "#0dffffff"; border.color: "#1affffff"; border.width: 1
+                            color: window.surface0; border.color: window.surface1; border.width: 1
                             
                             Rectangle { anchors.fill: parent; radius: window.s(10); color: window.ambientSecondary; opacity: 0.05; Behavior on color { ColorAnimation { duration: 1000 } } }
                             Column {
@@ -754,8 +741,8 @@ Item {
                         anchors.margins: window.s(25)
                         width: logoutMa.containsMouse ? window.s(44) + usernameText.implicitWidth + window.s(12) : window.s(44)
                         height: window.s(44); radius: window.s(14)
-                        color: logoutMa.containsMouse ? "#1affffff" : "transparent"
-                        border.color: logoutMa.containsMouse ? "#33ffffff" : "transparent"
+                        color: logoutMa.containsMouse ? window.surface1 : "transparent"
+                        border.color: logoutMa.containsMouse ? window.surface2 : "transparent"
                         clip: true
                         
                         transform: Translate { y: window.s(-20) * (1.0 - introTop) }
@@ -924,7 +911,7 @@ Item {
                                         ctx.lineWidth = window.s(8);
                                         ctx.beginPath();
                                         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-                                        ctx.strokeStyle = "#0dffffff";
+                                        ctx.strokeStyle = window.surface1;
                                         ctx.stroke();
                                         
                                         var fillGrad = ctx.createLinearGradient(0, height, width, 0);
@@ -1057,8 +1044,8 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: window.s(96)
                             radius: window.s(14)
-                            color: "#05ffffff"
-                            border.color: "#1affffff"
+                            color: window.surface0
+                            border.color: window.surface1
                             border.width: 1
 
                             opacity: introSliders
@@ -1106,8 +1093,8 @@ Item {
                                         Rectangle {
                                             anchors.fill: parent
                                             radius: window.s(9)
-                                            color: "#0dffffff"
-                                            border.color: "#1affffff"
+                                            color: window.surface1
+                                            border.color: window.surface2
                                             border.width: 1
                                             clip: true
 
@@ -1154,7 +1141,7 @@ Item {
                                         Layout.preferredWidth: window.s(32)
                                         Layout.preferredHeight: window.s(32)
                                         radius: window.s(16)
-                                        color: volIconMa.containsMouse ? "#1affffff" : "transparent"
+                                        color: volIconMa.containsMouse ? window.surface1 : "transparent"
                                         border.color: volIconMa.containsMouse ? window.profileStart : "transparent"
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         Behavior on border.color { ColorAnimation { duration: 150 } }
@@ -1205,8 +1192,8 @@ Item {
                                         Rectangle {
                                             anchors.fill: parent
                                             radius: window.s(9)
-                                            color: "#0dffffff"
-                                            border.color: "#1affffff"
+                                            color: window.surface1
+                                            border.color: window.surface2
                                             border.width: 1
                                             clip: true
 
@@ -1272,8 +1259,8 @@ Item {
                                     property color c1: window[baseColor] || window.surface1
                                     property color c2: Qt.lighter(c1, 1.2)
 
-                                    color: actionMa.containsMouse ? "#1affffff" : "#0dffffff"
-                                    border.color: actionMa.containsMouse ? c1 : "#1affffff"
+                                    color: actionMa.containsMouse ? window.surface1 : window.surface0
+                                    border.color: actionMa.containsMouse ? c1 : window.surface2
                                     border.width: actionMa.containsMouse ? 2 : 1
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     Behavior on border.color { ColorAnimation { duration: 200 } }
@@ -1421,8 +1408,8 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: window.s(54)
                             radius: window.s(14)
-                            color: "#0dffffff" 
-                            border.color: "#1affffff"
+                            color: window.surface0 
+                            border.color: window.surface1
                             border.width: 1
 
                             opacity: introProfiles

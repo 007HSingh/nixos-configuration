@@ -1,3 +1,4 @@
+//@ pragma UseQApplication
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -55,6 +56,7 @@ Variants {
             // --- State Variables ---
             property bool showHelpIcon: true
             property bool isRecording: false // Track screen recording
+            property bool updateAvailable: false // Track pending updates
             
             // Background poller to check if wl-screenrec is active
             Process {
@@ -70,6 +72,22 @@ Variants {
             Timer {
                 interval: 500; running: true; repeat: true
                 onTriggered: recPoller.running = true
+            }
+
+            // Background poller to check for pending updates
+            Process {
+                id: updatePoller
+                command: ["bash", "-c", "if [ -f ~/.cache/qs_update_pending ]; then echo '1'; else echo '0'; fi"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        barWindow.updateAvailable = (this.text.trim() === "1");
+                    }
+                }
+            }
+
+            Timer {
+                interval: 2000; running: true; repeat: true
+                onTriggered: updatePoller.running = true
             }
             
             Process {
@@ -118,22 +136,6 @@ Variants {
                         barWindow.isDesktop = (this.text.trim() === "desktop");
                     }
                 }
-            }
-
-            Process {
-                id: ethStatusPoller
-                running: barWindow.isDesktop
-                command: ["bash", "-c", "nmcli -t -f TYPE,STATE dev | grep 'ethernet' | grep -q 'connected' && echo 'Connected' || echo 'Disconnected'"]
-                stdout: StdioCollector {
-                    onStreamFinished: {
-                        let status = this.text.trim();
-                        if (status !== "") barWindow.ethStatus = status;
-                    }
-                }
-            }
-            Timer {
-                interval: 3000; running: barWindow.isDesktop; repeat: true
-                onTriggered: ethStatusPoller.running = true
             }
 
             // Triggers layout animations immediately to feel fast
@@ -377,13 +379,14 @@ Variants {
                                 if (barWindow.wifiStatus !== data.status) barWindow.wifiStatus = data.status;
                                 if (barWindow.wifiIcon !== data.icon) barWindow.wifiIcon = data.icon;
                                 if (barWindow.wifiSsid !== data.ssid) barWindow.wifiSsid = data.ssid;
+                                if (barWindow.ethStatus !== data.eth_status) barWindow.ethStatus = data.eth_status;
                             } catch(e) {}
                         }
                         networkWaiter.running = true;
                     }
                 }
             }
-            Process { id: networkWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/network_wait.sh"]; onExited: networkPoller.running = true }
+        Process { id: networkWaiter; command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/watchers/network_wait.sh"]; onExited: networkPoller.running = true }
 
             // --- BLUETOOTH ---
             Process {
@@ -636,6 +639,82 @@ Variants {
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/rofi_show.sh drun"])
+                        }
+                    }
+
+                    // --- NEW: Settings Button ---
+                    Rectangle {
+                        property bool isHovered: settingsMouse.containsMouse
+                        color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.95) : Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
+                        radius: barWindow.s(14); border.width: 1; border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, isHovered ? 0.15 : 0.05)
+                        Layout.preferredHeight: parent.moduleHeight; Layout.preferredWidth: barWindow.barHeight
+                        
+                        scale: isHovered ? 1.05 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
+                        Behavior on color { ColorAnimation { duration: 200 } }
+                        
+                        Text {
+                            anchors.centerIn: parent
+                            text: ""
+                            font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.s(24)
+                            color: parent.isHovered ? mocha.blue : mocha.text
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                        }
+                        MouseArea {
+                            id: settingsMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh toggle settings"])
+                        }
+                    }
+
+                    // --- NEW: Update Button ---
+                    Rectangle {
+                        id: updateButton
+                        property bool isHovered: updateMouse.containsMouse
+                        color: isHovered ? Qt.rgba(mocha.surface1.r, mocha.surface1.g, mocha.surface1.b, 0.95) : Qt.rgba(mocha.base.r, mocha.base.g, mocha.base.b, 0.75)
+                        radius: barWindow.s(14); border.width: 1; border.color: Qt.rgba(mocha.text.r, mocha.text.g, mocha.text.b, isHovered ? 0.15 : 0.05)
+                        
+                        property real targetWidth: barWindow.updateAvailable ? barWindow.barHeight : 0
+                        Layout.preferredWidth: targetWidth
+                        Layout.preferredHeight: parent.moduleHeight
+                        
+                        visible: targetWidth > 0 || opacity > 0
+                        opacity: barWindow.updateAvailable ? 1.0 : 0.0
+                        clip: true
+                        
+                        Behavior on targetWidth { NumberAnimation { duration: 400; easing.type: Easing.OutQuint } }
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+                        
+                        scale: isHovered ? 1.05 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
+                        Behavior on color { ColorAnimation { duration: 200 } }
+                        
+                        property color pulseColor: mocha.green
+                        SequentialAnimation on pulseColor {
+                            running: barWindow.updateAvailable
+                            loops: Animation.Infinite
+                            ColorAnimation { to: mocha.teal; duration: 1500; easing.type: Easing.InOutSine }
+                            ColorAnimation { to: mocha.green; duration: 1500; easing.type: Easing.InOutSine }
+                        }
+                        
+                        Text {
+                            anchors.centerIn: parent
+                            text: "󰚰" // package/update icon
+                            font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.s(24)
+                            color: parent.isHovered ? mocha.text : parent.pulseColor
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                        }
+
+                        MouseArea {
+                            id: updateMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                // Instantly hide the button and launch the updater
+                                barWindow.updateAvailable = false;
+                                Quickshell.execDetached(["bash", "-c", "rm -f ~/.cache/qs_update_pending && ~/.config/hypr/scripts/qs_manager.sh toggle updater"]);
+                            }
                         }
                     }
 
@@ -980,14 +1059,22 @@ Variants {
                                         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                                         onClicked: mouse => {
                                             if (mouse.button === Qt.LeftButton) {
-                                                modelData.activate();
+                                                if (modelData.isMenuOnly || modelData.onlyMenu) {
+                                                    menuAnchor.open();
+                                                } else if (typeof modelData.activate === "function") {
+                                                    modelData.activate(); // PROPERLY TRIGGERS APP OPEN
+                                                }
                                             } else if (mouse.button === Qt.MiddleButton) {
-                                                modelData.secondaryActivate();
+                                                if (typeof modelData.secondaryActivate === "function") {
+                                                    modelData.secondaryActivate();
+                                                }
                                             } else if (mouse.button === Qt.RightButton) {
-                                                if (modelData.menu) {
+                                                if (modelData.menu) { // EXPLICIT DBUS MENU CHECK
                                                     menuAnchor.open();
                                                 } else if (typeof modelData.contextMenu === "function") {
                                                     modelData.contextMenu(mouse.x, mouse.y);
+                                                } else {
+                                                    modelData.activate(); // Fallback
                                                 }
                                             }
                                         }
@@ -1257,7 +1344,7 @@ Variants {
                         }
                     }
                     
-                    // --- NEW: Screen Recording Indicator & Stop Button ---
+                    // --- Screen Recording Indicator & Stop Button ---
                     Rectangle {
                         id: recButton
                         property bool isHovered: recMouse.containsMouse

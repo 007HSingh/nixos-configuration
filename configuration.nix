@@ -29,6 +29,7 @@
     neovim 
     fzf
     direnv
+    zbar
     python311
     ffmpeg
     python314

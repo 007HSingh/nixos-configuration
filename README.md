@@ -1,6 +1,7 @@
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ilyamiro)
 
-## Arch installer now in alpha testing mode available for everyone. Just run this: 
+## Do NOT install it on NixOS. This config has a lot adapting to do, until I introduce flakes.
+## Arch installer now available for everyone. Just run this: 
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/ilyamiro/imperative-dots/master/install.sh)"
