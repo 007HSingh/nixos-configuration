@@ -60,7 +60,8 @@
       "$mainMod&SHIFT_L, F, togglefloating,"
 
       # Quickshell windows
-      "$mainMod&SHIFT_L, S, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle stewart"
+      "$mainMod, R, exec, bash ~/.config/hypr/scripts/reload.sh" 
+      "$mainMod&SHIFT_L, S, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle settings"
       "$mainMod, Q, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle music"
       "$mainMod, B, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle battery"
       "$mainMod, W, exec, bash ~/.config/hypr/scripts/qs_manager.sh toggle wallpaper"
