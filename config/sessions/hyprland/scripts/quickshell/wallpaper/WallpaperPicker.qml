@@ -98,13 +98,10 @@ Item {
 
         const escapeBash = (str) => String(str).replace(/(["\\$`])/g, '\\$1');
         
-        // 2. HARDWARE ADAPTATION: Force Vulkan rendering
-        // FIX: Hardcoded to bypass the Quickshell.env check since the backend is required.
-        const renderOverride = "env WGPU_BACKEND=vulkan ";
         const randomTransition = window.transitions[Math.floor(Math.random() * window.transitions.length)];
         
         // 3. AUTO-REVIVE COMMAND: Ensure daemon is alive before sending IPC commands
-        const ensureDaemonCmd = `if ! pgrep -x "swww-daemon" > /dev/null; then swww-daemon >/dev/null 2>&1 & sleep 0.2; fi`;
+        const ensureDaemonCmd = `if ! pgrep -x "awww-daemon" > /dev/null; then awww-daemon >/dev/null 2>&1 & sleep 0.2; fi`;
         
         if (window.currentFilter === "Search" && window.hasSearched) {
             let alreadyExists = window.isDownloaded(safeFileName);
@@ -132,9 +129,11 @@ Item {
                         ( matugen image "$FINAL_THUMB" || true; bash "$RELOAD_SCRIPT" || true ) &
                         MATUGEN_PID=$!
                         
-                        # DETERMINISTIC LOOP
+                        # GRACEFUL FALLBACK LOOP: Try Vulkan first, fallback to default immediately if it fails
                         for i in {1..20}; do
-                            if ${renderOverride}swww img "$DEST_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
+                            if env WGPU_BACKEND=vulkan swww img "$DEST_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
+                                break
+                            elif swww img "$DEST_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
                                 break
                             fi
                             sleep 0.05
@@ -181,9 +180,11 @@ Item {
                             ( matugen image "$FINAL_THUMB" || true; bash "$RELOAD_SCRIPT" || true ) &
                             MATUGEN_PID=$!
                             
-                            # DETERMINISTIC LOOP
+                            # GRACEFUL FALLBACK LOOP
                             for i in {1..20}; do
-                                if ${renderOverride}swww img "$DEST_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
+                                if env WGPU_BACKEND=vulkan swww img "$DEST_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
+                                    break
+                                elif swww img "$DEST_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
                                     break
                                 fi
                                 sleep 0.05
@@ -214,8 +215,11 @@ Item {
         } else {
             wallpaperCmd = `
                 ${ensureDaemonCmd}
+                # GRACEFUL FALLBACK LOOP
                 for i in {1..20}; do
-                    if ${renderOverride}swww img "$WALL_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
+                    if env WGPU_BACKEND=vulkan swww img "$WALL_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
+                        break
+                    elif swww img "$WALL_FILE" --transition-type ${randomTransition} --transition-pos 0.5,0.5 --transition-fps 144 --transition-duration 1 >/dev/null 2>&1; then
                         break
                     fi
                     sleep 0.05
@@ -244,7 +248,9 @@ Item {
             ) </dev/null >/dev/null 2>&1 & disown
         `
         Quickshell.execDetached(["bash", "-c", fullScript])
-    }    // -------------------------------------------------------------------------
+    }         
+    
+    // -------------------------------------------------------------------------
     // PERSISTENT SETTINGS
     // -------------------------------------------------------------------------
     Settings {

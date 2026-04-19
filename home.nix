@@ -28,6 +28,8 @@ in
   home.packages = with pkgs; [
       adwaita-icon-theme
       adw-gtk3 
+      libsForQt5.qt5ct      
+      qt6Packages.qt6ct
   ];
 
   # set cursor 
@@ -70,7 +72,9 @@ in
   gtk = {
     enable = true;
     
-    # Global `theme` block has been entirely removed to protect GTK4 apps.
+    # IMPORT DYNAMIC MATUGEN COLORS 
+    gtk3.extraCss = ''@import url("file:///home/ilyamiro/.cache/matugen/colors-gtk.css");'';
+    gtk4.extraCss = ''@import url("file:///home/ilyamiro/.cache/matugen/colors-gtk.css");'';
     
     # Target GTK3 specifically
     gtk3.extraConfig = {

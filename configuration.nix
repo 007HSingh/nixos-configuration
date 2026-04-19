@@ -26,6 +26,7 @@
     mpv
     zenity
     matugen
+    gpu-screen-recorder
     neovim 
     fzf
     direnv

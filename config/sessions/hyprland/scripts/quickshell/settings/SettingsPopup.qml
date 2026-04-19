@@ -63,6 +63,8 @@ Item {
     // -------------------------------------------------------------------------
     // SSOT GLOBAL SETTINGS & UPDATES
     // -------------------------------------------------------------------------
+    property int initialWorkspaceCount: 8 // Track the value loaded from JSON
+    
     property real setUiScale: 1.0
     property bool setOpenGuideAtStartup: true
     property bool setTopbarHelpIcon: true
@@ -108,8 +110,15 @@ Item {
         let cmd = "mkdir -p ~/.config/hypr/ && echo '" + jsonString + "' > ~/.config/hypr/settings.json && notify-send 'Quickshell' 'Settings Applied Successfully!'";
                   
         Quickshell.execDetached(["bash", "-c", cmd]);
+        
+        // ONLY queue a TopBar reload if the workspace count actually changed
+        if (root.setWorkspaceCount !== root.initialWorkspaceCount) {
+            Quickshell.execDetached(["qs", "-p", Quickshell.env("HOME") + "/.config/hypr/scripts/quickshell/TopBar.qml", "ipc", "call", "topbar", "queueReload"]);
+            
+            // Update the baseline so subsequent saves don't trigger unnecessary reloads
+            root.initialWorkspaceCount = root.setWorkspaceCount; 
+        }
     }
-
     Process {
         id: hyprLangReader
         command: ["bash", "-c", "grep -m1 '^ *kb_layout *=' ~/.config/hypr/hyprland.conf | cut -d'=' -f2 | tr -d ' '"]
@@ -139,7 +148,10 @@ Item {
                         if (parsed.wallpaperDir !== undefined) root.setWallpaperDir = parsed.wallpaperDir;
                         if (parsed.language !== undefined && parsed.language !== "") root.setLanguage = parsed.language;
                         if (parsed.kbOptions !== undefined) root.setKbOptions = parsed.kbOptions;
-                        if (parsed.workspaceCount !== undefined) root.setWorkspaceCount = parsed.workspaceCount;
+                        if (parsed.workspaceCount !== undefined) {
+                            root.setWorkspaceCount = parsed.workspaceCount;
+                            root.initialWorkspaceCount = parsed.workspaceCount; // TRACK BASELINE
+                        }
                     } else {
                         root.saveAppSettings();
                     }
@@ -149,7 +161,6 @@ Item {
             }
         }
     }
-
     ListModel {
         id: langModel
         ListElement { code: "us"; name: "English (US)" }
@@ -243,7 +254,18 @@ Item {
             easing.type: Easing.InExpo 
         }
         ScriptAction { 
-            script: Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/hypr/scripts/qs_manager.sh", "close"]) 
+            script: {
+                if (root.requiresReload) {
+                    // Wait for qs_manager.sh to clear the active widget state to prevent TopBar layout jumping
+                    let script = Quickshell.env("HOME") + "/.config/hypr/scripts/qs_manager.sh close; " +
+                                 "while [ -n \"$(cat /tmp/qs_current_widget 2>/dev/null)\" ]; do sleep 0.1; done; " +
+                                 "sleep 0.2; " + 
+                                 "qs -p ~/.config/hypr/scripts/quickshell/TopBar.qml ipc call topbar forceReload";
+                    Quickshell.execDetached(["bash", "-c", script]);
+                } else {
+                    Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/hypr/scripts/qs_manager.sh", "close"]);
+                }
+            } 
         }
     }
 
