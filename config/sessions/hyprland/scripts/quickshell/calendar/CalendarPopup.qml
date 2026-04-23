@@ -316,7 +316,7 @@ Item {
     }
 
     Timer {
-        interval: 150000 
+        interval: 15000 
         running: true; repeat: true
         onTriggered: weatherPoller.running = true
     }

@@ -20,6 +20,8 @@
     taskwarrior3
     inotify-tools
     file
+    pipes 
+    cbonsai
     git
     killall
     btop  

@@ -4,6 +4,30 @@
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 export PULSE_RUNTIME_PATH="$XDG_RUNTIME_DIR/pulse"
 
+# ---------------------------------------------------------
+# DEPENDENCY CHECK
+# ---------------------------------------------------------
+# First check for notify-send so we can display errors
+if ! command -v notify-send &> /dev/null; then
+    echo "ERROR: notify-send is not installed. Cannot display missing dependencies."
+    exit 1
+fi
+
+REQUIRED_CMDS=("gpu-screen-recorder" "grim" "satty" "wl-copy" "pactl" "quickshell" "zbarimg" "python3")
+MISSING_CMDS=()
+
+for cmd in "${REQUIRED_CMDS[@]}"; do
+    if ! command -v "$cmd" &> /dev/null; then
+        MISSING_CMDS+=("$cmd")
+    fi
+done
+
+if [ ${#MISSING_CMDS[@]} -ne 0 ]; then
+    notify-send -u critical -a "Screenshot System" "Missing Dependencies" "Cannot start. Please install:\n${MISSING_CMDS[*]}"
+    exit 1
+fi
+# ---------------------------------------------------------
+
 # Directories
 SAVE_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
 RECORD_DIR="${XDG_VIDEOS_DIR:-$HOME/Videos}/Recordings"
@@ -37,6 +61,26 @@ while [[ "$#" -gt 0 ]]; do
         *) shift ;;
     esac
 done
+
+# ---------------------------------------------------------
+# MULTI-MONITOR GEOMETRY FIX (HYPRLAND)
+# ---------------------------------------------------------
+# Convert local coordinates from the Quickshell overlay to global Wayland coordinates
+if [ -n "$GEOMETRY" ]; then
+    # Fetch the X and Y global offset of the currently focused monitor
+    OFFSET=$(hyprctl -j monitors | python3 -c "import sys,json; print(next((f\"{m['x']} {m['y']}\" for m in json.load(sys.stdin) if m.get('focused')), '0 0'))" 2>/dev/null)
+    read -r MON_X MON_Y <<< "${OFFSET:-0 0}"
+    
+    # Parse the local geometry passed from QML (Format: "X,Y WxH")
+    IFS=', x' read -r LOCAL_X LOCAL_Y W H <<< "$GEOMETRY"
+    
+    # Calculate true global coordinates
+    GLOBAL_X=$((LOCAL_X + MON_X))
+    GLOBAL_Y=$((LOCAL_Y + MON_Y))
+    
+    # Re-assemble for grim
+    GEOMETRY="${GLOBAL_X},${GLOBAL_Y} ${W}x${H}"
+fi
 
 # ---------------------------------------------------------
 # INSTANT QR SCANNING EXECUTION
@@ -189,7 +233,7 @@ if [ "$FULL_MODE" = true ] || [ -n "$GEOMETRY" ]; then
         MIC_DEV="${MIC_DEV:-default}"
 
         # Reverted back to the portal method for reliable security clearance
-        GSR_ARGS=(-w "portal" -c "mp4" -f "60")
+        GSR_ARGS=(-w "portal" -c "mp4" -f "60" -ac "aac")
 
         AUDIO_MIX=""
 

@@ -104,6 +104,12 @@ PanelWindow {
     property real endX: hasValidCache ? (parseFloat(cachedParts[0]) + parseFloat(cachedParts[2])) : 0
     property real endY: hasValidCache ? (parseFloat(cachedParts[1]) + parseFloat(cachedParts[3])) : 0
     
+    // Fluid Geometry Snapping
+    Behavior on startX { enabled: !root.isSelecting; NumberAnimation { duration: 350; easing.type: Easing.OutExpo } }
+    Behavior on startY { enabled: !root.isSelecting; NumberAnimation { duration: 350; easing.type: Easing.OutExpo } }
+    Behavior on endX { enabled: !root.isSelecting; NumberAnimation { duration: 350; easing.type: Easing.OutExpo } }
+    Behavior on endY { enabled: !root.isSelecting; NumberAnimation { duration: 350; easing.type: Easing.OutExpo } }
+
     property bool hasSelection: hasValidCache
     property bool isSelecting: false
     property bool isMaximized: false
@@ -149,7 +155,7 @@ PanelWindow {
     }
 
     function toggleMaximize() {
-        if (root.isVideoMode) return; // Disable maximization toggle during video mode
+        if (root.isVideoMode) return;
         if (!isMaximized) {
             preStartX = root.startX; preStartY = root.startY;
             preEndX = root.endX; preEndY = root.endY;
@@ -168,8 +174,34 @@ PanelWindow {
     Shortcut { sequence: "Escape"; onActivated: Qt.quit() }
     Shortcut { sequence: "Return"; onActivated: { if (root.hasSelection) root.executeCapture(root.isEditMode && !root.isVideoMode, root.isVideoMode) } }
     Shortcut { sequence: "Tab"; onActivated: root.isVideoMode = !root.isVideoMode }
+    Shortcut { sequence: "Left"; onActivated: root.isVideoMode = false }
+    Shortcut { sequence: "Right"; onActivated: root.isVideoMode = true }
+    Shortcut { sequence: "F11"; onActivated: root.toggleMaximize() }
 
-    // --- Global Reusable Toolbar Button ---
+    // --- Animated Revealer for Fluid Transitions ---
+    component AnimWrap: Item {
+        property bool isShown: false
+        property real contentWidth: 0
+        property real rightPadding: s(3) // Reducción de padding lateral para los íconos
+        property real targetWidth: contentWidth + rightPadding
+        
+        width: isShown ? targetWidth : 0
+        height: parent.height
+        opacity: isShown ? 1.0 : 0.0
+        clip: true
+        
+        Behavior on width { NumberAnimation { duration: 350; easing.type: Easing.OutQuart } }
+        Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.OutQuart } }
+        
+        default property alias content: internalWrapper.children
+        Item { 
+            id: internalWrapper
+            width: contentWidth 
+            height: parent.height 
+        }
+    }
+
+    // --- Global Reusable Toolbar Button (Matte Edition) ---
     component ToolbarBtn: Rectangle {
         id: tBtn
         property string iconTxt: ""
@@ -177,18 +209,39 @@ PanelWindow {
         property bool isDanger: false
         signal clicked()
 
-        Layout.preferredHeight: s(36)
-        Layout.preferredWidth: label !== "" ? (txt.implicitWidth + s(36)) : s(36)
+        height: s(36)
+        width: label !== "" ? (txt.implicitWidth + s(36)) : s(36)
         radius: s(18)
-        color: maBtn.containsMouse ? (isDanger ? Qt.alpha(_theme.red, 0.2) : _theme.surface0) : "transparent"
+        
+        // Idle is a solid base color, full matte filled-look
+        color: tBtn.isDanger ? _theme.red : (maBtn.containsMouse ? _theme.surface1 : _theme.surface0)
         Behavior on color { ColorAnimation { duration: 150 } }
 
         RowLayout {
             anchors.centerIn: parent; spacing: s(6)
-            Text { font.family: "Iosevka Nerd Font"; text: tBtn.iconTxt; color: tBtn.isDanger ? _theme.red : _theme.text; font.pixelSize: s(18) }
-            Text { id: txt; visible: tBtn.label !== ""; font.family: "JetBrains Mono"; font.weight: Font.DemiBold; text: tBtn.label; color: tBtn.isDanger ? _theme.red : _theme.text; font.pixelSize: s(13) }
+            Text { 
+                font.family: "Iosevka Nerd Font"
+                text: tBtn.iconTxt
+                color: tBtn.isDanger ? _theme.crust : _theme.text
+                font.pixelSize: s(18) 
+            }
+            Text { 
+                id: txt
+                visible: tBtn.label !== ""
+                font.family: "JetBrains Mono"
+                font.weight: Font.DemiBold
+                text: tBtn.label
+                color: tBtn.isDanger ? _theme.crust : _theme.text
+                font.pixelSize: s(13) 
+            }
         }
-        MouseArea { id: maBtn; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: tBtn.clicked() }
+        MouseArea { 
+            id: maBtn
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tBtn.clicked() 
+        }
     }
 
     Item {
@@ -216,7 +269,6 @@ PanelWindow {
         }
     }
 
-    // The Main Selection Border
     Rectangle {
         visible: root.isSelecting || root.hasSelection
         x: root.selX; y: root.selY; width: root.selW; height: root.selH
@@ -265,37 +317,27 @@ PanelWindow {
         function getInteractionMode(mx, my, mods) {
             if (!root.hasSelection) return 1; 
             if (mods & Qt.ShiftModifier) return 2; 
-
             let margin = s(20) 
-            
-            // Check if mouse is on the specific coordinate lines
             let onLeftLine = Math.abs(mx - root.selX) <= margin; 
             let onRightLine = Math.abs(mx - (root.selX + root.selW)) <= margin
             let onTopLine = Math.abs(my - root.selY) <= margin; 
             let onBottomLine = Math.abs(my - (root.selY + root.selH)) <= margin
-
-            // Check if mouse is actually within the span of the selection (plus margin)
             let withinX = mx >= (root.selX - margin) && mx <= (root.selX + root.selW + margin);
             let withinY = my >= (root.selY - margin) && my <= (root.selY + root.selH + margin);
 
-            // Corner checks (always require being on both lines)
             if (onTopLine && onLeftLine) return 3; 
             if (onTopLine && onRightLine) return 5;
             if (onBottomLine && onLeftLine) return 8; 
             if (onBottomLine && onRightLine) return 10;
-            
-            // Edge checks (require being on the line AND within the perpendicular bounds)
             if (onTopLine && withinX) return 4; 
             if (onBottomLine && withinX) return 9;
             if (onLeftLine && withinY) return 6; 
             if (onRightLine && withinY) return 7;
-            
             return 1;
         }
 
         onPositionChanged: (mouse) => {
             if (root.isVideoMode) { cursorShape = Qt.ArrowCursor; return; }
-
             let mode = root.isSelecting ? root.interactionMode : getInteractionMode(mouse.x, mouse.y, mouse.modifiers)
             switch(mode) {
                 case 2: cursorShape = Qt.ClosedHandCursor; break;
@@ -358,27 +400,32 @@ PanelWindow {
         }
     }
 
-    // --- Main Bottom Toolbar ---
-    Rectangle {
+    // --- Main Bottom Toolbar (Smooth Matte Rounded Rect) ---
+    Item {
         id: toolbar
         z: 30 
         
-        property bool fitsOutsideBottom: (root.selY + root.selH + height + s(15)) <= root.height
-        property bool fitsOutsideTop: (root.selY - height - s(15)) >= 0
-        property bool fitsInside: root.selH >= (height + s(30)) && root.selW >= (width + s(20))
+        // Fully expanded total height
+        property real totalHeight: s(120)
+        property bool fitsOutsideBottom: (root.selY + root.selH + totalHeight + s(15)) <= root.height
 
-        visible: root.hasSelection && !root.isSelecting && (fitsOutsideBottom || fitsOutsideTop || fitsInside) && !root.isScanningQr && !root.showQrPopup
+        visible: root.hasSelection && !root.isSelecting && !root.isScanningQr && !root.showQrPopup
+        
+        width: Math.max(toolbarRow.width + s(64), s(340))
+        height: totalHeight 
+
         x: Math.max(s(10), Math.min(parent.width - width - s(10), root.selX + (root.selW / 2) - (width / 2)))
-        y: fitsOutsideBottom ? (root.selY + root.selH + s(15)) : (fitsOutsideTop ? (root.selY - height - s(15)) : (root.selY + root.selH - height - s(15)))
+        y: fitsOutsideBottom ? (root.selY + root.selH + s(15)) : 
+           ((root.selY - height - s(15)) >= 0 ? (root.selY - height - s(15)) : (root.height - height - s(15)))
 
-        width: toolbarLayout.width + s(16)
-        height: s(52)
-        radius: s(26)
-        color: _theme.base
-        border.color: _theme.surface1
-        border.width: s(2)
-
-        property bool popUpwards: (toolbar.y + s(200)) > root.height
+        // The Smooth Translucent Matte Background
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(_theme.base.r, _theme.base.g, _theme.base.b, 0.85)
+            border.color: Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.08)
+            border.width: s(1)
+            radius: s(24)
+        }
 
         component AudioControl: RowLayout {
             property string iconOn: ""
@@ -395,7 +442,8 @@ PanelWindow {
 
             Rectangle {
                 width: s(30); height: s(30); radius: s(15)
-                color: maIcon.containsMouse ? _theme.surface1 : "transparent"
+                // Filled, solid matte-look on idle
+                color: maIcon.containsMouse ? _theme.surface2 : _theme.surface0
                 Behavior on color { ColorAnimation { duration: 150 } }
 
                 Text {
@@ -438,7 +486,8 @@ PanelWindow {
                 Text {
                     anchors.centerIn: parent
                     font.family: "Iosevka Nerd Font"
-                    text: toolbar.popUpwards ? "󰅃" : "󰅀"
+                    // Correcting dropdown icon orientation base on position relative to fitsOutsideBottom
+                    text: toolbar.fitsOutsideBottom ? "󰅃" : "󰅀" 
                     color: _theme.text
                     font.pixelSize: s(16)
                 }
@@ -451,11 +500,13 @@ PanelWindow {
             visible: false
             width: s(280)
             height: micModel.count === 0 ? s(40) : Math.min(s(180), micModel.count * s(36))
-            x: micAudio.x - s(40)
-            y: toolbar.popUpwards ? (-height - s(8)) : (toolbar.height + s(8))
-            color: _theme.base
-            border.color: _theme.surface1; border.width: s(2)
-            radius: s(8)
+            x: -s(140) 
+            // Correcting dropdown positioning
+            y: toolbar.fitsOutsideBottom ? (toolbar.height + s(8)) : (-height - s(8))
+            color: Qt.rgba(_theme.base.r, _theme.base.g, _theme.base.b, 0.95)
+            border.color: Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.08)
+            border.width: s(1)
+            radius: s(12)
             z: 50
 
             Text {
@@ -486,66 +537,255 @@ PanelWindow {
             }
         }
 
-        RowLayout {
-            id: toolbarLayout
-            anchors.centerIn: parent
-            spacing: s(8)
+        // Top Content: The Action Tools
+        Row {
+            id: toolbarRow
+            anchors.top: parent.top
+            anchors.topMargin: s(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            height: root.s(36)
+            spacing: 0
 
-            Rectangle {
-                width: s(80); height: s(36); radius: s(18)
-                color: _theme.surface0
+            // Tab Switcher with Morphing Animation (Stretchy Mauve Pill)
+            Item {
+                // Width is slightly bigger to handle reducced icon padding on right
+                width: s(110) + s(3); height: parent.height
                 
-                RowLayout {
-                    anchors.fill: parent; anchors.margins: s(4); spacing: 0
+                Rectangle {
+                    width: s(110); height: s(36); radius: s(18) 
+                    color: _theme.surface0
+                    
                     Rectangle {
-                        Layout.fillWidth: true; Layout.fillHeight: true; radius: s(14)
-                        color: !root.isVideoMode ? _theme.surface2 : "transparent"
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        Text { anchors.centerIn: parent; font.family: "Iosevka Nerd Font"; text: "󰄄"; color: !root.isVideoMode ? _theme.text : _theme.subtext0; font.pixelSize: s(16) }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.isVideoMode = false }
+                        id: activeHighlight
+                        y: s(2)
+                        height: parent.height - s(4)
+                        radius: s(16) 
+                        color: _theme.mauve
+                        z: 0
+
+                        property bool curVideoMode: root.isVideoMode
+                        onCurVideoModeChanged: {
+                            // Morph duration/easing when going right vs left
+                            if (curVideoMode) { // Moving right
+                                rightAnim.duration = 200; leftAnim.duration = 350;
+                            } else { // Moving left
+                                leftAnim.duration = 200; rightAnim.duration = 350;
+                            }
+                        }
+
+                        property real targetLeft: curVideoMode ? (parent.width / 2) : s(2)
+                        property real targetRight: targetLeft + (parent.width / 2) - s(2)
+
+                        property real actualLeft: targetLeft
+                        property real actualRight: targetRight
+
+                        Behavior on actualLeft { NumberAnimation { id: leftAnim; duration: 250; easing.type: Easing.OutExpo } }
+                        Behavior on actualRight { NumberAnimation { id: rightAnim; duration: 250; easing.type: Easing.OutExpo } }
+
+                        x: actualLeft
+                        width: actualRight - actualLeft
                     }
-                    Rectangle {
-                        Layout.fillWidth: true; Layout.fillHeight: true; radius: s(14)
-                        color: root.isVideoMode ? _theme.surface2 : "transparent"
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        Text { anchors.centerIn: parent; font.family: "Iosevka Nerd Font"; text: ""; color: root.isVideoMode ? _theme.text : _theme.subtext0; font.pixelSize: s(16) }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.isVideoMode = true }
+                    
+                    Row {
+                        anchors.fill: parent
+                        z: 1
+                        Item {
+                            width: parent.width / 2; height: parent.height
+                            Text { anchors.centerIn: parent; font.family: "Iosevka Nerd Font"; text: "󰄄"; color: !root.isVideoMode ? _theme.crust : _theme.text; font.pixelSize: s(16) }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.isVideoMode = false }
+                        }
+                        Item {
+                            width: parent.width / 2; height: parent.height
+                            Text { anchors.centerIn: parent; font.family: "Iosevka Nerd Font"; text: ""; color: root.isVideoMode ? _theme.crust : _theme.text; font.pixelSize: s(16) }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.isVideoMode = true }
+                        }
                     }
                 }
             }
 
-            Rectangle { width: s(2); Layout.fillHeight: true; Layout.topMargin: s(10); Layout.bottomMargin: s(10); color: _theme.surface0; radius: s(1) }
-
-            AudioControl { 
-                id: deskAudio; visible: root.isVideoMode; iconOn: "󰓃"; iconOff: "󰓄" 
-                volumeValue: root.deskVol; mutedValue: root.deskMute
-                onVolumeUpdate: (v) => { root.deskVol = v; root.saveAudioPrefs() }
-                onMuteUpdate: (m) => { root.deskMute = m; root.saveAudioPrefs() }
-            }
-            
-            AudioControl { 
-                id: micAudio; visible: root.isVideoMode; iconOn: "󰍬"; iconOff: "󰍭"; hasDropdown: true
-                volumeValue: root.micVol; mutedValue: root.micMute
-                onVolumeUpdate: (v) => { root.micVol = v; root.saveAudioPrefs() }
-                onMuteUpdate: (m) => { root.micMute = m; root.saveAudioPrefs() }
-                onDropdownClicked: micDropdown.visible = !micDropdown.visible
+            // Video Controls
+            AnimWrap {
+                isShown: root.isVideoMode; contentWidth: s(2)
+                Rectangle { width: s(2); height: s(16); anchors.verticalCenter: parent.verticalCenter; color: _theme.surface0; radius: s(1) }
             }
 
-            Rectangle { visible: root.isVideoMode; width: s(2); Layout.fillHeight: true; Layout.topMargin: s(10); Layout.bottomMargin: s(10); color: _theme.surface0; radius: s(1) }
-
-            ToolbarBtn { visible: !root.isVideoMode; iconTxt: "󰄄"; label: "Capture"; onClicked: root.executeCapture(false, false) }
-            ToolbarBtn { visible: root.isVideoMode; iconTxt: "󰑊"; label: "Record"; isDanger: true; onClicked: root.executeCapture(false, true) }
-
-            ToolbarBtn { visible: !root.isVideoMode; iconTxt: "󰏫"; onClicked: root.executeCapture(true, false) }
-            ToolbarBtn { visible: !root.isVideoMode; iconTxt: "⿻"; onClicked: root.performQrScan() }
-
-            Rectangle { width: s(2); Layout.fillHeight: true; Layout.topMargin: s(10); Layout.bottomMargin: s(10); color: _theme.surface0; radius: s(1) }
+            AnimWrap {
+                isShown: root.isVideoMode; contentWidth: s(94)
+                AudioControl { 
+                    id: deskAudio; width: parent.width; height: parent.height
+                    iconOn: "󰓃"; iconOff: "󰓄" 
+                    volumeValue: root.deskVol; mutedValue: root.deskMute
+                    onVolumeUpdate: (v) => { root.deskVol = v; root.saveAudioPrefs() }
+                    onMuteUpdate: (m) => { root.deskMute = m; root.saveAudioPrefs() }
+                }
+            }
             
-            ToolbarBtn { visible: !root.isVideoMode; iconTxt: root.isMaximized ? "" : ""; onClicked: root.toggleMaximize() }
-            ToolbarBtn { iconTxt: "󰅖"; isDanger: true; onClicked: Qt.quit() }
+            AnimWrap {
+                isShown: root.isVideoMode; contentWidth: s(118)
+                AudioControl { 
+                    id: micAudio; width: parent.width; height: parent.height
+                    iconOn: "󰍬"; iconOff: "󰍭"; hasDropdown: true
+                    volumeValue: root.micVol; mutedValue: root.micMute
+                    onVolumeUpdate: (v) => { root.micVol = v; root.saveAudioPrefs() }
+                    onMuteUpdate: (m) => { root.micMute = m; root.saveAudioPrefs() }
+                    onDropdownClicked: { micDropdown.visible = !micDropdown.visible; micDropdown.x = mapToItem(toolbar, 0, 0).x - s(120) }
+                }
+            }
+
+            // Image Controls
+            AnimWrap {
+                isShown: !root.isVideoMode; contentWidth: s(2)
+                Rectangle { width: s(2); height: s(16); anchors.verticalCenter: parent.verticalCenter; color: _theme.surface0; radius: s(1) }
+            }
+
+            AnimWrap {
+                isShown: !root.isVideoMode; contentWidth: s(36)
+                ToolbarBtn { iconTxt: "󰏫"; onClicked: root.executeCapture(true, false) }
+            }
+
+            AnimWrap {
+                isShown: !root.isVideoMode; contentWidth: s(36)
+                ToolbarBtn { iconTxt: "⿻"; onClicked: root.performQrScan() }
+            }
+
+            AnimWrap {
+                isShown: !root.isVideoMode; contentWidth: s(2)
+                Rectangle { width: s(2); height: s(16); anchors.verticalCenter: parent.verticalCenter; color: _theme.surface0; radius: s(1) }
+            }
+            
+            AnimWrap {
+                isShown: !root.isVideoMode; contentWidth: s(36)
+                ToolbarBtn { iconTxt: root.isMaximized ? "" : ""; onClicked: root.toggleMaximize() }
+            }
+
+            // Universal Close Button
+            Item {
+                width: s(2) + s(3) + s(36); height: parent.height // Widened width for reducced padding on right
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: parent.height
+                    spacing: s(3) // Reducción de padding lateral para los íconos en top part
+                    Rectangle { width: s(2); height: s(16); anchors.verticalCenter: parent.verticalCenter; color: _theme.surface0; radius: s(1);}
+                    ToolbarBtn { 
+                        anchors.verticalCenter: parent.verticalCenter
+                        iconTxt: "󰅖"; isDanger: true; onClicked: Qt.quit() 
+                    }
+                }
+            }
+        }
+
+        // Bottom Content: Center Capture Layout with Dynamic Gradient Lines
+        Item {
+            id: captureSection
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: s(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            height: s(56) // Aumento ligero de altura para el capture circle más grande
+            z: 10
+
+            // Smooth Left Line + Hover Wave
+            Rectangle {
+                id: leftLineBase
+                height: s(4) // Líneas horizontales más gruesas
+                radius: s(2) // Radio escalado
+                color: Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.1) // Subtle structural line
+                anchors.left: parent.left
+                anchors.leftMargin: s(24)
+                anchors.right: actionBtnContainer.left
+                anchors.rightMargin: s(16)
+                anchors.verticalCenter: parent.verticalCenter
+                clip: true
+
+                // Stretchy gradient 'wave'
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    // Stretches left when hovered
+                    width: actionArea.containsMouse ? parent.width : 0
+                    radius: s(2)
+                    Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutExpo } }
+                    
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: root.isVideoMode ? _theme.red : root.accentColor }
+                        GradientStop { position: 1.0; color: "transparent" }
+                    }
+                }
+            }
+
+            // Central Capture Circle (Slightly Bigger)
+            Item {
+                id: actionBtnContainer
+                width: s(56) // Círculo 'capture' un poco más grande
+                height: width
+                anchors.centerIn: parent
+                z: 20
+                
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: root.isVideoMode ? Qt.alpha(_theme.red, 0.4) : Qt.alpha(_theme.surface1, 0.8)
+                    border.width: s(2)
+                    Behavior on border.color { ColorAnimation { duration: 250 } }
+                }
+
+                Rectangle {
+                    // Círculo interno escalado
+                    width: actionArea.pressed ? s(32) : (actionArea.containsMouse ? s(40) : s(36))
+                    height: width
+                    radius: width / 2
+                    anchors.centerIn: parent
+                    color: root.isVideoMode ? _theme.red : root.accentColor
+                    Behavior on color { ColorAnimation { duration: 250 } }
+                    Behavior on width { NumberAnimation { duration: 350; easing.type: Easing.OutBack } }
+                }
+
+                MouseArea {
+                    id: actionArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.executeCapture(false, root.isVideoMode)
+                }
+            }
+
+            // Smooth Right Line + Hover Wave
+            Rectangle {
+                id: rightLineBase
+                height: s(4) // Líneas horizontales más gruesas
+                radius: s(2) // Radio escalado
+                color: Qt.rgba(_theme.text.r, _theme.text.g, _theme.text.b, 0.1)
+                anchors.right: parent.right
+                anchors.rightMargin: s(24)
+                anchors.left: actionBtnContainer.right
+                anchors.leftMargin: s(16)
+                anchors.verticalCenter: parent.verticalCenter
+                clip: true
+
+                // Stretchy gradient 'wave'
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    // Stretches right when hovered
+                    width: actionArea.containsMouse ? parent.width : 0
+                    radius: s(2)
+                    Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutExpo } }
+                    
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "transparent" }
+                        GradientStop { position: 1.0; color: root.isVideoMode ? _theme.red : root.accentColor }
+                    }
+                }
+            }
         }
     }
 
+    // --- QR Popup and Backend Hooks ---
     Repeater {
         model: qrModel
         delegate: Rectangle {
@@ -564,7 +804,6 @@ PanelWindow {
             border.width: s(2)
 
             property bool isHovered: maHover.containsMouse
-
             scale: isHovered ? 1.0 : model.qBaseScale
             z: isHovered ? 100 : (40 - index)
             transformOrigin: Item.Center
@@ -729,11 +968,10 @@ PanelWindow {
         qrWaitTimer.start()
     }   
     
-    // Add this Timer alongside your other timers (e.g. near qrWaitTimer)
     Timer {
         id: captureTimer
         property string pendingCmd: ""
-        interval: 80   // enough for Hyprland to actually unmap the surface
+        interval: 80
         repeat: false
         onTriggered: {
             Quickshell.execDetached(["bash", "-c", pendingCmd])
@@ -751,8 +989,8 @@ PanelWindow {
         }
         if (openEditor) cmd += " --edit"
     
-        root.visible = false          // hide overlay immediately
+        root.visible = false
         captureTimer.pendingCmd = cmd
-        captureTimer.start()          // fire grim only after compositor unmaps us
+        captureTimer.start()
     }
 }

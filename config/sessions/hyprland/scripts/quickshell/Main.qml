@@ -27,8 +27,9 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore 
     focusable: true
 
-    width: Screen.width
-    height: Screen.height
+    // FIXED: Bind directly to the window's actual screen boundaries rather than the global singleton.
+    implicitWidth: masterWindow.screen.width
+    implicitHeight: masterWindow.screen.height
 
     visible: isVisible
 
@@ -40,6 +41,17 @@ PanelWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 65 
+
+        // Dynamically shrink the hole away from the active widget so it doesn't punch through it.
+        // If the sidebar is open on the left, push the hole's left edge out of the way.
+        anchors.leftMargin: (masterWindow.currentActive !== "hidden" && masterWindow.animX < 10) ? masterWindow.animW : 0
+        
+        // If a widget (like a notification center) is on the right, push the hole's right edge out of the way.
+        anchors.rightMargin: (masterWindow.currentActive !== "hidden" && (masterWindow.animX + masterWindow.animW) > (parent.width - 10)) ? masterWindow.animW : 0
+        
+        // Animate the mask to perfectly follow the morphing widget
+        Behavior on anchors.leftMargin { NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutQuart } }
+        Behavior on anchors.rightMargin { NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutQuart } }
     }
 
     MouseArea {
@@ -62,8 +74,8 @@ PanelWindow {
     property bool isVisible: false
     property string activeArg: ""
     property bool disableMorph: false 
-    property int morphDuration: 500
-    property int exitDuration: 300 // Controls how fast the outgoing widget disappears
+    property int morphDuration: 250
+    property int exitDuration: 150 // Controls how fast the outgoing widget disappears
 
     property real animW: 1
     property real animH: 1
@@ -124,7 +136,7 @@ PanelWindow {
             let popupData = Object.assign({ "uid": masterWindow._popupCounter }, notifData);
             activePopupsModel.append(popupData);
         }
-    }    
+    }   
     property var notifModel: globalNotificationHistory
     
     // --- INSTANTIATE THE POPUP OVERLAY ---
@@ -174,12 +186,14 @@ PanelWindow {
         }
     }
 
+    // FIXED: Use masterWindow dimensions instead of the static Screen singleton
     function getLayout(name) {
-        return Registry.getLayout(name, 0, 0, Screen.width, Screen.height, masterWindow.globalUiScale);
+        return Registry.getLayout(name, 0, 0, masterWindow.width, masterWindow.height, masterWindow.globalUiScale);
     }
 
+    // FIXED: Target masterWindow directly so it catches local geometry changes.
     Connections {
-        target: Screen
+        target: masterWindow
         function onWidthChanged() { handleNativeScreenChange(); }
         function onHeightChanged() { handleNativeScreenChange(); }
     }
@@ -199,7 +213,7 @@ PanelWindow {
     }
 
     onIsVisibleChanged: {
-        if (isVisible) masterWindow.requestActivate();
+        if (isVisible) widgetStack.forceActiveFocus();
     }
 
     Item {
@@ -208,16 +222,14 @@ PanelWindow {
         width: masterWindow.animW
         height: masterWindow.animH
         clip: true 
-        layer.enabled: true 
 
-        // Smoother easing type: OutExpo makes animations feel snappy yet perfectly fluid
-        Behavior on x { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutExpo } }
-        Behavior on y { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutExpo } }
-        Behavior on width { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutExpo } }
-        Behavior on height { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutExpo } }
+        Behavior on x { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutQuart } }
+        Behavior on y { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutQuart } }
+        Behavior on width { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutQuart } }
+        Behavior on height { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.OutQuart } }
 
         opacity: masterWindow.isVisible ? 1.0 : 0.0
-        Behavior on opacity { NumberAnimation { duration: masterWindow.morphDuration === 500 ? 300 : 200; easing.type: Easing.InOutSine } }
+        Behavior on opacity { NumberAnimation { duration: masterWindow.morphDuration === 250 ? 150 : 150; easing.type: Easing.InOutSine } }
 
         MouseArea {
             anchors.fill: parent
@@ -244,13 +256,12 @@ PanelWindow {
 
                 replaceEnter: Transition {
                     ParallelAnimation {
-                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
-                        NumberAnimation { property: "scale"; from: 0.98; to: 1.0; duration: 400; easing.type: Easing.OutBack }
+                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 250; easing.type: Easing.OutExpo }
+                        NumberAnimation { property: "scale"; from: 0.98; to: 1.0; duration: 250; easing.type: Easing.OutBack }
                     }
                 }
                 replaceExit: Transition {
                     ParallelAnimation {
-                        // Uses the dynamically set exitDuration
                         NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: masterWindow.exitDuration; easing.type: Easing.InExpo }
                         NumberAnimation { property: "scale"; from: 1.0; to: 1.02; duration: masterWindow.exitDuration; easing.type: Easing.InExpo }
                     }
@@ -260,15 +271,13 @@ PanelWindow {
     }
 
     function switchWidget(newWidget, arg) {
-        // REMOVED: Quickshell.execDetached file writing. State is strictly in memory now.
-
         prepTimer.stop();
         delayedClear.stop();
 
         if (newWidget === "hidden") {
             if (currentActive !== "hidden") {
-                masterWindow.morphDuration = 250; 
-                masterWindow.exitDuration = 250;
+                masterWindow.morphDuration = 150; 
+                masterWindow.exitDuration = 150;
                 masterWindow.disableMorph = false;
                 
                 masterWindow.animW = 1;
@@ -279,8 +288,8 @@ PanelWindow {
             }
         } else {
             if (currentActive === "hidden") {
-                masterWindow.morphDuration = 250;
-                masterWindow.exitDuration = 300;
+                masterWindow.morphDuration = 200;
+                masterWindow.exitDuration = 150;
                 masterWindow.disableMorph = false;
                 
                 let t = getLayout(newWidget);
@@ -288,27 +297,22 @@ PanelWindow {
                 masterWindow.animY = t.ry;
                 masterWindow.animW = 1;
                 masterWindow.animH = 1;
-
-                prepTimer.newWidget = newWidget;
-                prepTimer.newArg = arg;
-                prepTimer.start();
-                
             } else {
-                // Morphing directly between widgets (including wallpaper)
-                masterWindow.morphDuration = 500;
+                masterWindow.morphDuration = 250;
                 masterWindow.disableMorph = false;
-                
-                // If transitioning to wallpaper, make the previous widget disappear significantly faster
-                masterWindow.exitDuration = (newWidget === "wallpaper") ? 100 : 300;
-                
-                executeSwitch(newWidget, arg, false);
+                masterWindow.exitDuration = (newWidget === "wallpaper") ? 100 : 150;
             }
+
+            // Route all incoming widgets through the debounce timer to prevent StackView corruption
+            prepTimer.newWidget = newWidget;
+            prepTimer.newArg = arg;
+            prepTimer.start();
         }
     }
 
     Timer {
         id: prepTimer
-        interval: 50
+        interval: 15 
         property string newWidget: ""
         property string newArg: ""
         onTriggered: executeSwitch(newWidget, newArg, false)
@@ -329,7 +333,8 @@ PanelWindow {
         let props = newWidget === "wallpaper" ? { "widgetArg": arg } : {};
         props["notifModel"] = masterWindow.notifModel;
 
-        if (immediate) {
+        // CRITICAL FIX: Fallback to Immediate if the StackView is already busy with an interrupted transition.
+        if (immediate || widgetStack.busy) {
             widgetStack.replace(t.comp, props, StackView.Immediate);
         } else {
             widgetStack.replace(t.comp, props);
@@ -368,21 +373,17 @@ PanelWindow {
                         if (targetWidget === masterWindow.currentActive) {
                             let currentItem = widgetStack.currentItem;
                             
-                            // 1. If it's a tabbed widget and user requests a DIFFERENT tab, switch natively
                             if (arg !== "" && currentItem && currentItem.activeMode !== undefined && currentItem.activeMode !== arg) {
                                 currentItem.activeMode = arg;
                             } 
-                            // 2. If it's a toggle command and the tab matches (or no subtarget given), close it
                             else if (cmd === "toggle") {
                                 switchWidget("hidden", "");
                             }
-                            // 3. If "open" and already on the correct tab, do nothing (stays open).
                             
                         } else if (getLayout(targetWidget)) {
                             switchWidget(targetWidget, arg);
                         }
                     } else if (getLayout(cmd)) { 
-                        // Fallback for old formatting
                         let arg = parts.length > 1 ? parts.slice(1).join(":") : "";
                         delayedClear.stop();
                         
@@ -403,7 +404,7 @@ PanelWindow {
                 ipcWatcher.running = true;
             }
         }
-    }    
+    }   
     Timer {
         id: delayedClear
         interval: masterWindow.morphDuration 
