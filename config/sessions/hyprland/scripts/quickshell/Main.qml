@@ -27,7 +27,6 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore 
     focusable: true
 
-    // FIXED: Bind directly to the window's actual screen boundaries rather than the global singleton.
     implicitWidth: masterWindow.screen.width
     implicitHeight: masterWindow.screen.height
 
@@ -42,14 +41,9 @@ PanelWindow {
         anchors.right: parent.right
         height: 48 
 
-        // Dynamically shrink the hole away from the active widget so it doesn't punch through it.
-        // If the sidebar is open on the left, push the hole's left edge out of the way.
         anchors.leftMargin: (masterWindow.currentActive !== "hidden" && masterWindow.animX < 10) ? masterWindow.animW : 0
-        
-        // If a widget (like a notification center) is on the right, push the hole's right edge out of the way.
         anchors.rightMargin: (masterWindow.currentActive !== "hidden" && (masterWindow.animX + masterWindow.animW) > (parent.width - 10)) ? masterWindow.animW : 0
         
-        // --- MODIFIED: Changed from OutQuart to InOutCubic for smoother, continuous masking
         Behavior on anchors.leftMargin { NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
         Behavior on anchors.rightMargin { NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
     }
@@ -63,24 +57,17 @@ PanelWindow {
     // =========================================================
     // --- DAEMON: PRELOADING SYSTEM
     // =========================================================
-    // Hidden container to warm up the QML engine cache without displaying anything
     Item {
         id: preloaderContainer
         visible: false
     }
 
     Component.onCompleted: {
-        // State is now strictly in memory; no need to write to /tmp on startup.
-
-        // PRELOADING: Asynchronously initialize heavy widgets in the background.
-        // This prevents the main thread from blocking (which freezes Hyprland)
-        // the first time StackView tries to instantiate them.
         Qt.callLater(() => {
             let widgetsToPreload = ["settings", "search", "help"];
             for (let i = 0; i < widgetsToPreload.length; i++) {
                 let t = getLayout(widgetsToPreload[i]);
                 if (t && t.comp) {
-                    // Qt.Asynchronous tells QML to build this incrementally over multiple frames
                     t.comp.incubateObject(preloaderContainer, {
                         "notifModel": masterWindow.notifModel
                     }, Qt.Asynchronous);
@@ -92,7 +79,6 @@ PanelWindow {
     property string currentActive: "hidden"
 
     onCurrentActiveChanged: {
-        // Broadcast active state so TopBar knows when to morph
         Quickshell.execDetached(["bash", "-c", "echo '" + currentActive + "' > /tmp/qs_current_widget"]);
     }
 
@@ -100,8 +86,7 @@ PanelWindow {
     property string activeArg: ""
     property bool disableMorph: false 
     property int morphDuration: 550
-    // --- MODIFIED: Slightly increased default exit duration for smoother fade outs
-    property int exitDuration: 200 
+    property int exitDuration: 300 
 
     property real animW: 1
     property real animH: 1
@@ -116,12 +101,10 @@ PanelWindow {
     // =========================================================
     // --- DAEMON: NOTIFICATION HANDLING
     // =========================================================
-    // 1. Permanent History (For the Notification Center)
     ListModel {
         id: globalNotificationHistory
     }
 
-    // 2. Transient Popups (For the OSD)
     ListModel {
         id: activePopupsModel
     }
@@ -150,14 +133,12 @@ PanelWindow {
                 "appName": n.appName !== "" ? n.appName : "System",
                 "summary": n.summary !== "" ? n.summary : "No Title",
                 "body": n.body !== "" ? n.body : "",
-                "iconPath": n.appIcon !== "" ? n.appIcon : "", // <-- ADDED: Save the -i parameter path
+                "iconPath": n.appIcon !== "" ? n.appIcon : "",
                 "notif": n
             };
 
-            // A. Insert into the permanent center
             globalNotificationHistory.insert(0, notifData);
 
-            // B. Append to the on-screen popups
             masterWindow._popupCounter++;
             let popupData = Object.assign({ "uid": masterWindow._popupCounter }, notifData);
             activePopupsModel.append(popupData);
@@ -165,7 +146,6 @@ PanelWindow {
     }   
     property var notifModel: globalNotificationHistory
     
-    // --- INSTANTIATE THE POPUP OVERLAY ---
     Notifs.NotificationPopups {
         id: osdPopups
         popupModel: activePopupsModel
@@ -212,12 +192,10 @@ PanelWindow {
         }
     }
 
-    // FIXED: Use masterWindow dimensions instead of the static Screen singleton
     function getLayout(name) {
         return Registry.getLayout(name, 0, 0, masterWindow.width, masterWindow.height, masterWindow.globalUiScale);
     }
 
-    // FIXED: Target masterWindow directly so it catches local geometry changes.
     Connections {
         target: masterWindow
         function onWidthChanged() { handleNativeScreenChange(); }
@@ -249,21 +227,20 @@ PanelWindow {
         height: masterWindow.animH
         clip: true 
 
-        // --- MODIFIED: Changed from OutQuart to InOutCubic for smooth, continuous bounding box movement
+        // Restored continuous bounding box morphing
         Behavior on x { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
         Behavior on y { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
         Behavior on width { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
         Behavior on height { enabled: !masterWindow.disableMorph; NumberAnimation { duration: masterWindow.morphDuration; easing.type: Easing.InOutCubic } }
 
         opacity: masterWindow.isVisible ? 1.0 : 0.0
-        Behavior on opacity { NumberAnimation { duration: masterWindow.morphDuration === 350 ? 250 : 200; easing.type: Easing.InOutSine } }
+        Behavior on opacity { NumberAnimation { duration: masterWindow.morphDuration === 350 ? 250 : 200; easing.type: Easing.InOutCubic } }
 
         MouseArea {
             anchors.fill: parent
         }
 
-        // FIXED: Replaced fixed targetW/targetH with anchors.fill: parent.
-        // This forces the StackView to dynamically expand/compress with the morphing box
+        // Restored full anchoring so the content properly morphs with the box
         Item {
             anchors.fill: parent
 
@@ -281,17 +258,27 @@ PanelWindow {
                     if (currentItem) currentItem.forceActiveFocus();
                 }
 
-                // --- MODIFIED: Switched OutExpo/InExpo to OutQuint/InQuint and slightly bumped durations for softer content fading
+                // THE ULTIMATE FIX: Anti-Blink Edition
                 replaceEnter: Transition {
-                    ParallelAnimation {
-                        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 300; easing.type: Easing.OutQuint }
-                        NumberAnimation { property: "scale"; from: 0.98; to: 1.0; duration: 300; easing.type: Easing.OutQuint }
+                    SequentialAnimation {
+                        PropertyAction { property: "z"; value: -1 }
+                        // Keep new widget fully opaque. The old widget acts as a shield while this one sets up.
+                        NumberAnimation { property: "opacity"; from: 1.0; to: 1.0; duration: masterWindow.morphDuration }
                     }
                 }
+                
                 replaceExit: Transition {
-                    ParallelAnimation {
-                        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: masterWindow.exitDuration; easing.type: Easing.InQuint }
-                        NumberAnimation { property: "scale"; from: 1.0; to: 1.02; duration: masterWindow.exitDuration; easing.type: Easing.InQuint }
+                    SequentialAnimation {
+                        PropertyAction { property: "z"; value: 1 }
+                        ParallelAnimation {
+                            SequentialAnimation {
+                                // THE SHIELD: Hold old widget completely opaque for 40ms (~2-3 frames).
+                                // This perfectly masks the "black flash" caused by the new widget uploading textures to the GPU.
+                                PauseAnimation { duration: 40 }
+                                NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: masterWindow.morphDuration - 40; easing.type: Easing.InOutQuad }
+                            }
+                            NumberAnimation { property: "scale"; from: 1.0; to: 1.05; duration: masterWindow.morphDuration; easing.type: Easing.OutCubic }
+                        }
                     }
                 }
             }
@@ -304,9 +291,8 @@ PanelWindow {
 
         if (newWidget === "hidden") {
             if (currentActive !== "hidden") {
-                // --- MODIFIED: Increased close durations
-                masterWindow.morphDuration = 250; 
-                masterWindow.exitDuration = 200;
+                masterWindow.morphDuration = 350; 
+                masterWindow.exitDuration = 350;
                 masterWindow.disableMorph = false;
                 
                 masterWindow.animW = 1;
@@ -317,9 +303,9 @@ PanelWindow {
             }
         } else {
             if (currentActive === "hidden") {
-                // --- MODIFIED: Increased open durations
-                masterWindow.morphDuration = 300; 
-                masterWindow.exitDuration = 200;
+                // Slower open with a nice pop
+                masterWindow.morphDuration = 450; 
+                masterWindow.exitDuration = 450;
                 masterWindow.disableMorph = false;
                 
                 let t = getLayout(newWidget);
@@ -328,13 +314,12 @@ PanelWindow {
                 masterWindow.animW = 1;
                 masterWindow.animH = 1;
             } else {
-                // --- MODIFIED: Increased morphing durations to let the continuous ease shine
-                masterWindow.morphDuration = 350; 
+                // Slower, smoother widget-to-widget morphs
+                masterWindow.morphDuration = 500; 
                 masterWindow.disableMorph = false;
-                masterWindow.exitDuration = (newWidget === "wallpaper") ? 150 : 200;
+                masterWindow.exitDuration = (newWidget === "wallpaper") ? 200 : 500;
             }
 
-            // Route all incoming widgets through the debounce timer to prevent StackView corruption
             prepTimer.newWidget = newWidget;
             prepTimer.newArg = arg;
             prepTimer.start();
@@ -364,8 +349,9 @@ PanelWindow {
         let props = newWidget === "wallpaper" ? { "widgetArg": arg } : {};
         props["notifModel"] = masterWindow.notifModel;
 
-        // CRITICAL FIX: Fallback to Immediate if the StackView is already busy with an interrupted transition.
-        if (immediate || widgetStack.busy) {
+        // FIXED: Removed `|| widgetStack.busy`. If a transition is interrupted, 
+        // letting StackView replace normally allows for a smooth crossfade over the snap.
+        if (immediate) {
             widgetStack.replace(t.comp, props, StackView.Immediate);
         } else {
             widgetStack.replace(t.comp, props);
